@@ -79,6 +79,11 @@ namespace SwReview.AddIn.Tests;
 /// (`labels.note`), until its status is next written.
 /// *Added 2026-11-02 (002 T368; a read-only check of those fixes):* with no labels the card says nothing of the note, and the
 /// line is wholly visible at a docked pane's 300 px, in its grouped row.
+///
+/// Four Review page fixes, the owner's pick (002 T372; cycle 13): a `finding` event carries the tally, as the disposition events
+/// do, and the page shows it as it arrives; after a reload the cards carry the backend's words whichever of the labels and the
+/// snapshot answers first; a read-only restore's cleared line is the backend's read-only form, which asks for no decision; and
+/// a read-only restore's Transcript names each withdrawal that took a decision, as the live line does.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -116,6 +121,13 @@ public sealed class ReviewPageTriageTests
     /// </summary>
     private const string ClearedLine =
         "The check ran again after your answer and its verdict changed, so your Accept (real but already known) was cleared. Decide again.";
+
+    /// <summary>
+    /// <see cref="ClearedLine"/> as a read-only restore names it (002 cycle 13): the backend's line without the call to decide
+    /// again (`RerunWords.read_only`), since the restore's decision buttons are off. The page prints it as sent.
+    /// </summary>
+    private const string ReadOnlyClearedLine =
+        "The check ran again after your answer and its verdict changed, so your Accept (real but already known) was cleared.";
 
     [Fact]
     public void TheReviewPageOffersTheFourOutcomesBesideAcceptRejectAndDefer()
@@ -773,6 +785,9 @@ public sealed class ReviewPageTriageTests
     /// 193A: a backend restart and a read-only restore bring the line back. The backend no longer holds chat-2
     /// (`404 UnknownChat`), so the page restores it from its run folder (`GET /reviews/{run_id}`), read-only; that
     /// snapshot names F-001's line too, and the card shows it with its decision and triage controls off.
+    /// *Changed 2026-11-02 on purpose (002 T372; cycle 13):* the read-only snapshot named the live line, "... Decide again.", on
+    /// a card whose buttons are off; the backend now names its read-only form, without that call (002 T371), and the card shows
+    /// it as sent, asking for no decision. A guard of the page's half: the page prints the line as sent.
     /// </summary>
     [Fact]
     public void AClearedLineComesBackInAReadOnlyRestore()
@@ -784,15 +799,19 @@ public sealed class ReviewPageTriageTests
             await Reviewed(driver, Finding("F-009"));
             await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 404,
                 Refusal("UnknownChat", "no chat " + OtherChat, false));
-            await driver.Route("GET", "/reviews/" + OtherRun, 200,
-                Snapshot(OtherRun, true, new[] { Cleared("F-001", AcceptedAlreadyKnown()) }, Finding("F-001", null, "suspected", "low")));
+            await driver.Route("GET", "/reviews/" + OtherRun, 200, Snapshot(
+                OtherRun,
+                true,
+                new[] { Cleared("F-001", AcceptedAlreadyKnown(), ReadOnlyClearedLine) },
+                Finding("F-001", null, "suspected", "low")));
 
             await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
             await driver.Settle();
 
             JsonElement card = await driver.Read(ReadCard("F-001"));
             Assert.Empty(Pressed(card));
-            Assert.Equal(ClearedLine, card.GetProperty("status").GetString());
+            Assert.Equal(ReadOnlyClearedLine, card.GetProperty("status").GetString());
+            Assert.DoesNotContain("Decide again", card.GetProperty("status").GetString()!, StringComparison.Ordinal);
             Assert.Equal("card-status cleared", card.GetProperty("statusClass").GetString());
             Assert.All(Disabled(card), Assert.True);
         });
@@ -1516,6 +1535,8 @@ public sealed class ReviewPageTriageTests
     /// on a card whose buttons are off. A read-only review takes no press, so every flagged card with no triage says the
     /// backend's read-only words, whatever its decision, and asks for none: F-101 not yet decided, F-102's Accept, F-104's
     /// Reject and F-105's Defer without one, and the cleared F-103; F-100, with its triage, and the pass F-106 say nothing.
+    /// *Changed 2026-11-02 on purpose (002 T372; cycle 13):* F-103's status line was the live cleared line, "... Decide again.";
+    /// a read-only snapshot now names its read-only form (002 T371), which the card shows as sent.
     /// </summary>
     [Fact]
     public void ARestoredReviewSaysWhichCardsHaveNoTriage()
@@ -1529,7 +1550,7 @@ public sealed class ReviewPageTriageTests
                 driver.InitialRoutes.Add(("GET", "/reviews/" + RestoredRun, 200, Snapshot(
                     RestoredRun,
                     true,
-                    new[] { Cleared("F-103", AcceptedAlreadyKnown()) },
+                    new[] { Cleared("F-103", AcceptedAlreadyKnown(), ReadOnlyClearedLine) },
                     Finding("F-100", Disposition("accepted", "FICT intended", "already_known")),
                     Finding("F-101"),
                     Finding("F-102", Disposition("accepted", "FICT intended", null)),
@@ -1551,7 +1572,7 @@ public sealed class ReviewPageTriageTests
                 }
 
                 Assert.Equal(0, (await driver.Read(ReadNoTriage("F-106"))).GetProperty("count").GetInt32());
-                Assert.Equal(ClearedLine, (await driver.Read(ReadCard("F-103"))).GetProperty("status").GetString());
+                Assert.Equal(ReadOnlyClearedLine, (await driver.Read(ReadCard("F-103"))).GetProperty("status").GetString());
                 foreach (string id in new[] { "F-100", "F-101", "F-102", "F-103", "F-104", "F-105", "F-106" })
                 {
                     Assert.All(Disabled(await driver.Read(ReadCard(id))), off => Assert.True(off, "a triage button is live on a read-only review."));
@@ -2105,6 +2126,123 @@ public sealed class ReviewPageTriageTests
         });
     }
 
+    // ---- four Review page fixes, the owner's pick (002 T372; cycle 13) ---------------------------
+
+    /// <summary>
+    /// The tally counts a finding a resumed turn adds as it arrives (the backlog's cycle 7 section): a `finding` event carries
+    /// the review's tally, as the disposition events do, and the page shows it as sent. F-001's Accept as `already known` is the
+    /// review's one triage; the resumed turn announces F-002, flagged and undecided, its tally counting it not recorded, and the
+    /// page shows that count at once, not when the turn ends. Then the fold announces F-001 again with another verdict, its
+    /// Accept cleared, so its event carries no tally - the review records no triage any more - and the tally goes, as a
+    /// disposition event that carries none takes it.
+    /// </summary>
+    [Fact]
+    public void AFindingAnnouncedWithTheTallyShowsItAsItArrives()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            JsonObject accepted = Tally(0, 1, 0, 0, 0, 0);
+            JsonObject added = Tally(0, 1, 0, 0, 1, 0);
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001"));
+            await driver.Push(Chat, 2, "disposition", WithTally(DispositionEvent("F-001", AcceptedAlreadyKnown()), accepted));
+            await driver.Settle();
+            Assert.Equal(Lines(accepted), ReviewPageDriver.Strings(await driver.Read(ReadTally), "lines"));
+
+            await driver.Push(Chat, 3, "finding", WithTally(Finding("F-002"), added));
+            await driver.Settle();
+            JsonElement counted = await driver.Read(ReadTally);
+            Assert.True(counted.GetProperty("shown").GetBoolean(), "the finding's tally is not shown.");
+            Assert.Equal(Lines(added), ReviewPageDriver.Strings(counted, "lines"));
+            Assert.Equal(new[] { "F-001", "F-002" }, ReviewPageDriver.Strings(await driver.Read(ReadCards), "ids"));
+
+            await driver.Push(Chat, 4, "finding", Finding("F-001", null, "suspected", "low"));
+            await driver.Settle();
+            JsonElement gone = await driver.Read(ReadTally);
+            Assert.False(gone.GetProperty("shown").GetBoolean(), "a tally is shown after a finding that carries none: " + gone);
+            Assert.Empty(ReviewPageDriver.Strings(gone, "lines"));
+        });
+    }
+
+    /// <summary>
+    /// After a reload the page reads `/labels` and the snapshot at once (the backlog's cycle 9 section). Here the snapshot answers
+    /// first and the labels are held: once they answer, every card carries the backend's words - its no-triage line and its
+    /// triage buttons' words - as when the labels answer first. Chat-1's live snapshot holds F-001 not yet decided and F-002's
+    /// Accept without a triage. Reloaded again with chat-1 gone from the backend, the page restores it read-only from its run
+    /// folder, the labels held once more, and both cards say the read-only words.
+    /// </summary>
+    [Fact]
+    public void CardsGetTheirWordsWhenTheSnapshotAnswersBeforeTheLabels()
+    {
+        const string ChatRun = "20260923-101500-bracket-1";
+        string livePath = "/sessions/" + Chat + "/snapshot";
+        string[] findings = { Finding("F-001"), Finding("F-002", Disposition("accepted", string.Empty, null)) };
+        ReviewPageDriver.Run(
+            driver =>
+            {
+                driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, ChatRun, ReviewPageDriver.ReviewedPath, 10, 15));
+                driver.InitialRoutes.Add(("GET", "/labels", 200, LabelsSample.Json()));
+                driver.HeldInitialRoutes.Add(("GET", "/labels"));
+                driver.InitialRoutes.Add(("GET", livePath, 200, Snapshot(ChatRun, false, findings)));
+            },
+            async driver =>
+            {
+                await LabelsAnswerAfter(driver, livePath);
+                Assert.Equal(LabelsSample.NoTriageUndecided, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("text").GetString());
+                Assert.Equal(LabelsSample.NoTriageAccepted, (await driver.Read(ReadNoTriage("F-002"))).GetProperty("text").GetString());
+                Assert.Equal(ContractTriages().Select(Word).ToArray(), ReviewPageDriver.Strings(await driver.Read(ReadCard("F-001")), "words"));
+
+                driver.InitialRoutes.RemoveAll(route => route.Path == livePath);
+                driver.InitialRoutes.Add(("GET", livePath, 404, ReviewPageRecheckTests.UnknownChat));
+                driver.InitialRoutes.Add(("GET", "/reviews/" + ChatRun, 200, Snapshot(ChatRun, true, findings)));
+                await driver.Reload();
+                await LabelsAnswerAfter(driver, "/reviews/" + ChatRun);
+                foreach (string id in new[] { "F-001", "F-002" })
+                {
+                    Assert.Equal(LabelsSample.NoTriageReadOnly, (await driver.Read(ReadNoTriage(id))).GetProperty("text").GetString());
+                }
+            });
+    }
+
+    /// <summary>
+    /// A read-only restore after a backend restart replays no Transcript (H-g-010's *Left open*), so its snapshot names, under
+    /// `withdrawn`, each withdrawal that took a decision, from the record's own stream, and the Transcript prints each after its
+    /// note that the transcript is in the run folder, worded as the live line: the reason, then the backend's clause, as sent -
+    /// characters, never markup. Results hold the snapshot's cards alone.
+    /// </summary>
+    [Fact]
+    public void AReadOnlyRestoresTranscriptShowsEachWithdrawalWithADecision()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Finding("F-009"));
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 404,
+                Refusal("UnknownChat", "no chat " + OtherChat, false));
+            await driver.Route("GET", "/reviews/" + OtherRun, 200, WithWithdrawn(
+                Snapshot(OtherRun, true, Finding("F-002")),
+                Took("F-001", RejectedWrong(), TookRejectedWrong),
+                Took("F-003", AcceptedAlreadyKnown(), HostileClause)));
+
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+            await driver.Click("view-transcript");
+
+            JsonElement transcript = await driver.Read(ReadRestoredTranscript);
+            Assert.Equal(
+                new[]
+                {
+                    "F-001 withdrawn: " + BoughtReason + "; " + TookRejectedWrong,
+                    "F-003 withdrawn: " + BoughtReason + "; " + HostileClause,
+                },
+                ReviewPageDriver.Strings(transcript, "markers"));
+            Assert.True(transcript.GetProperty("noteFirst").GetBoolean(), "a withdrawal is not after the restored Transcript's note.");
+            Assert.Equal(0, (await driver.Read(ReadInjected)).GetProperty("injected").GetInt32());
+            Assert.Equal(new[] { "F-002" }, ReviewPageDriver.Strings(await driver.Read(ReadCards), "ids"));
+        });
+    }
+
     // ---- driving the page ---------------------------------------------------------------------
 
     private static void Labelled(ReviewPageDriver driver) =>
@@ -2148,6 +2286,21 @@ public sealed class ReviewPageTriageTests
         }
 
         await driver.EndSession(Chat);
+    }
+
+    /// <summary>
+    /// After a boot or a reload whose labels are held (002 cycle 13): the page has read and been answered
+    /// <paramref name="snapshotPath"/> and asked for the labels, which then answer.
+    /// </summary>
+    private static async Task LabelsAnswerAfter(ReviewPageDriver driver, string snapshotPath)
+    {
+        await driver.Settle();
+        string[] asked = (await driver.Calls())
+            .Select(call => call.GetProperty("method").GetString() + " " + call.GetProperty("path").GetString())
+            .ToArray();
+        Assert.Contains("GET " + snapshotPath, asked);
+        Assert.Contains("GET /labels", asked);
+        await driver.ReleaseRoute("GET", "/labels");
     }
 
     /// <summary>Presses one triage button of one card, as the engineer does.</summary>
@@ -2312,13 +2465,16 @@ public sealed class ReviewPageTriageTests
             .Select(card => Finding(card.Id, card.Decision == null ? null : Disposition(card.Decision, string.Empty, null)))
             .ToArray();
 
-    /// <summary>A `disposition.cleared` body as the runner writes it: the finding, the disposition cleared and the line.</summary>
-    private static string Cleared(string findingId, Dictionary<string, object?> disposition) =>
+    /// <summary>
+    /// A `disposition.cleared` body as the runner writes it: the finding, the disposition cleared and the line - or, with
+    /// <paramref name="reason"/>, as a read-only snapshot names it (002 cycle 13).
+    /// </summary>
+    private static string Cleared(string findingId, Dictionary<string, object?> disposition, string reason = ClearedLine) =>
         JsonSerializer.Serialize(new Dictionary<string, object?>
         {
             { "finding_id", findingId },
             { "disposition", disposition },
-            { "reason", ClearedLine },
+            { "reason", reason },
         });
 
     /// <summary>
@@ -2464,6 +2620,17 @@ public sealed class ReviewPageTriageTests
             { "disposition", disposition },
             { "taken", clause },
         });
+
+    /// <summary>
+    /// <paramref name="snapshot"/> naming <paramref name="withdrawals"/> - `finding.withdrawn` bodies that took a decision -
+    /// under `withdrawn`, as a read-only restore names them from the record's own stream (002 cycle 13).
+    /// </summary>
+    private static string WithWithdrawn(string snapshot, params string[] withdrawals)
+    {
+        JsonObject node = JsonNode.Parse(snapshot)!.AsObject();
+        node["withdrawn"] = new JsonArray(withdrawals.Select(body => JsonNode.Parse(body)).ToArray());
+        return node.ToJsonString();
+    }
 
     // ---- reading the page ---------------------------------------------------------------------
 
@@ -2636,6 +2803,18 @@ return JSON.stringify({
     private const string ReadTranscript = @"
 var transcript = document.getElementById('transcript');
 return JSON.stringify({ ok: true, text: transcript.textContent, markers: h.texts(transcript, '.marker') });";
+
+    /// <summary>
+    /// A restored review's Transcript (002 cycle 13): its finding markers, and whether its note that the transcript is in the
+    /// run folder comes before the first of them.
+    /// </summary>
+    private const string ReadRestoredTranscript = @"
+var transcript = document.getElementById('transcript');
+return JSON.stringify({
+  ok: true,
+  markers: h.texts(transcript, '.marker'),
+  noteFirst: h.before(transcript.querySelector('.restored'), transcript.querySelector('.marker'))
+});";
 
     /// <summary>How many elements backend text injected into the Transcript.</summary>
     private const string ReadInjected = @"

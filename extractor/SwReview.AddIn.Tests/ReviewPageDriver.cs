@@ -74,6 +74,14 @@ internal sealed class ReviewPageDriver
     public List<(string Method, string Path, int Status, string Body)> InitialRoutes { get; } =
         new List<(string Method, string Path, int Status, string Body)>();
 
+    /// <summary>
+    /// The method and path of each of <see cref="InitialRoutes"/> whose answer is held until
+    /// <see cref="ReleaseRoute"/>: a read the page makes the moment it learns where the backend is,
+    /// answered after another (002 cycle 13: the labels after the snapshot).
+    /// </summary>
+    public HashSet<(string Method, string Path)> HeldInitialRoutes { get; } =
+        new HashSet<(string Method, string Path)>();
+
     /// <summary>What `settings.save` answers: null for `settings.saved`, or an `error` payload.</summary>
     public object? SettingsSaveError { get; set; }
 
@@ -151,10 +159,7 @@ internal sealed class ReviewPageDriver
         Page.Reload();
         await Until(() => Posted("ready").Length > readies, "sent ready after the reload");
         await Page.ExecuteScriptAsync(FetchStub);
-        foreach ((string method, string path, int status, string body) in InitialRoutes)
-        {
-            await Route(method, path, status, body);
-        }
+        await RouteInitial();
     }
 
     public async Task Reload()
@@ -573,14 +578,27 @@ var h = {
         Assert.True(_readyId != null, "the Review page never sent `ready`.");
 
         await Page.ExecuteScriptAsync(FetchStub);
-        foreach ((string method, string path, int status, string body) in InitialRoutes)
-        {
-            await Route(method, path, status, body);
-        }
+        await RouteInitial();
 
         _booted = true;
         Reply("init", _readyId!, Init());
         await OffscreenReviewPage.Settled(Page);
+    }
+
+    /// <summary>Puts <see cref="InitialRoutes"/> in place, holding each one <see cref="HeldInitialRoutes"/> names.</summary>
+    private async Task RouteInitial()
+    {
+        foreach ((string method, string path, int status, string body) in InitialRoutes)
+        {
+            if (HeldInitialRoutes.Contains((method, path)))
+            {
+                await HoldRoute(method, path, status, body);
+            }
+            else
+            {
+                await Route(method, path, status, body);
+            }
+        }
     }
 
     private void OnMessage(string json)
