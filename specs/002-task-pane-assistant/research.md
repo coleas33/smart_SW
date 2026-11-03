@@ -8320,3 +8320,9 @@ note box from the record, losing a note typed for the press.
     are T404's sub-item in [tasks.md](tasks.md).
   - *Added 2026-11-03 (the read-only check):* its fixes came after that tree too; their gates are
     T404's second sub-item.
+  - *Done 2026-11-03, cycle 23 stacked on cycle 22:* the gates above ran on cycle 23 before it was
+    stacked on cycle 22 (Phase 37, T397 to T400, itself on cycle 21 and feature 007's cycle 20). The
+    two met in eighteen files, five of them pane fixtures, and each kept both cycles' text, the
+    lower cycle's first; 002's row is 393 / 7 / 0 at T401 and 396 / 4 / 0 at the close, the pane
+    fixtures regenerate as git merged them, and the sha256 pin moved with them. T404's sub-item of
+    the stacking in [tasks.md](tasks.md) names each meeting.
