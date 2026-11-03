@@ -193,7 +193,9 @@ class ToolContext:
     Set only by `start_review`, before any finding is recorded; empty for every other context.
     *Changed 2026-11-03 (T392):* the day such a review showed it, by its record's own clock, and
     the read budget and the check of the parts can leave a later one or none; 002 FR-031's T392
-    note gives the rule."""
+    note gives the rule. *Changed 2026-11-03 (cycle 21):* keyed as this review numbers its
+    subjects, an earlier dump's keys renumbered by their ids' stable names; FR-031's cycle 21 note
+    gives the rule."""
     _drawing_read: str | None = field(default=None, init=False, repr=False)
     """What `drawing_read_mode` answered, once asked (feature 013)."""
 

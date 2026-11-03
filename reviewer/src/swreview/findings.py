@@ -340,6 +340,12 @@ def finding_subject_key(finding: Finding) -> SubjectKey:
     instance of the same document, or an entity renumbered within one document - a hole, a
     feature, a drawing's view or dimension - can move one onto another's finding of the same
     check (002 research.md, cycle 17, and its Tier 2 review).
+
+    *Changed 2026-11-03 (002 cycle 21; roadmap hole H-d-009):* that reader no longer joins two
+    dumps' keys as they are. An earlier record of another dump has each id its key holds matched
+    by the stable name its own dump gives it (`report/first_shown.stable_names`) - a component by
+    its full instance path, an entity by its name in its document - so a renumbered instance or
+    entity gives no date, one whose id moved keeps it, and an id with no stable name gives none.
     """
     locations = subject_locations(
         (ref.document_id, ref.sheet, ref.view, ref.annotation, ref.page, ref.persist_ref)
