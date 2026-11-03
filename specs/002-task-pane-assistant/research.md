@@ -7392,4 +7392,7 @@ the decision register now records 160A as done.
   fact proved by three mutants pins that a review the engineer left before the labels answered
   draws nothing once they have, not even a failure's error card; and 009
   [contracts/review-summary.md](../009-engineer-workspace/contracts/review-summary.md) section 5
-  names the `finding` event's tally. The whole suites run next, on the tree after these fixes.
+  names the `finding` event's tally. The whole suites ran on the tree after these fixes
+  (`1530105f`): 18,876 passed and 5 skipped on Python 3.12.3 and the same on 3.11; ruff clean;
+  the identifier scan, 58 passed; C# with zero warnings, then 10,274 extractor and 4,348 add-in
+  tests passed (T374's last sub-item).
