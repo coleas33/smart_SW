@@ -1540,7 +1540,9 @@ mirroring the line. The seat plan's step 4.1. Dated notes in
 - The link check over the cycle's 8 changed Markdown files: 164 relative links, anchors
   included, none broken. Every changed file LF in the index.
 - No SOLIDWORKS process, seat task, or paid or live test ran.
-- The whole suites on the final tree: recorded once they run.
+- The whole suites on the final tree (`7338d9b8`, 2026-11-03): 18,996 passed and 5 skipped on Python
+  3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed; C# with zero warnings,
+  then 10,274 extractor and 4,383 add-in tests passed (T099's line).
 
 **The Tier 2 review** (T099; 2026-11-03). No must-fix; three should-fix, each fixed test first,
 and nothing left for the backlog. The gates above ran on the tree before these fixes.
