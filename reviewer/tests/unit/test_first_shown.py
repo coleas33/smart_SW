@@ -26,6 +26,9 @@ of this review's own dump keeps its ids as they are. Cycle 17's cases are of tha
 read at the engineer's confirmation reloads the package, so a finding on it keeps its earlier date;
 an earlier review's package is opened only within the read budget; and the match is pinned for
 four more kinds and for a part replaced by one of the same file name from another folder.
+
+*Changed 2026-11-03 (its read-only check, T396):* the reload keeps, for each subject key, the
+earlier day of its read and the start's, so a date a card named is never lost or moved later.
 """
 
 from __future__ import annotations

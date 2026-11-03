@@ -196,7 +196,8 @@ class ToolContext:
     note gives the rule. *Changed 2026-11-03 (cycle 21):* keyed as this review numbers its
     subjects, an earlier dump's keys renumbered by their ids' stable names; FR-031's cycle 21 note
     gives the rule. *Changed 2026-11-03 (cycle 21's Tier 2 review):* and read again when a
-    confirmed drawing reloads the package (`read_first_shown`)."""
+    confirmed drawing reloads the package (`read_first_shown`); *changed 2026-11-03 (its read-only
+    check):* each key keeping the earlier day of the two reads."""
     read_first_shown: Callable[[EvidencePackage], dict[SubjectKey, str]] | None = field(
         default=None, repr=False
     )
@@ -229,12 +230,18 @@ class ToolContext:
         *Changed 2026-11-03 (002 cycle 21's Tier 2 review):* the first-shown dates are read again
         for the package reloaded (`read_first_shown`), so a finding on the drawing read is
         matched by the stable names only that package holds, and dated as an earlier review that
-        read the same drawing showed it.
+        read the same drawing showed it. *Changed 2026-11-03 (its read-only check):* each subject
+        key keeps the earlier day of that read and the start's. The second read sees the run root
+        as it is then, within a budget of its own, so it can miss an earlier review the start
+        read; a date a card named is never lost or moved later. A drawing merged so only appends
+        ids and keeps the package's id, so the start's keys still name the same subjects.
         """
         self.package = package
         self._index_package()
         if self.read_first_shown is not None:
-            self.first_shown = self.read_first_shown(package.package)
+            for key, day in self.read_first_shown(package.package).items():
+                if key not in self.first_shown or day < self.first_shown[key]:
+                    self.first_shown[key] = day
 
     @property
     def ir(self) -> EvidencePackage:
