@@ -4282,6 +4282,9 @@ class FinalRender:
 
     reached: threading.Event = field(default_factory=threading.Event)
     release: threading.Event = field(default_factory=threading.Event)
+    chat: ChatSession | None = None
+    """The chat whose render is held, once it is reached, so a case can read its `settle_line`
+    (added 2026-11-03, cycle 24's read-only check)."""
 
 
 @pytest.fixture
@@ -4294,6 +4297,7 @@ def final_render(app: Any, monkeypatch: pytest.MonkeyPatch) -> Iterator[FinalRen
 
     def held_render(chat: Any) -> None:
         if not held.reached.is_set():
+            held.chat = chat
             held.reached.set()
             assert held.release.wait(TIMEOUT_S), "the test did not release the final render"
         original(chat)
@@ -4330,7 +4334,12 @@ def sent_in_one_settle(held: FinalRender, *requests: Callable[[], Any]) -> list[
     """Each of `requests` sent in its own thread while the final render is held, in order and half
     a second apart, and their answers once the render is let go. A refusal comes back at once; a
     request that waits for the settle is still waiting, which is checked before the render is let
-    go."""
+    go. *Changed 2026-11-03 (cycle 24's read-only check):* each is sent once the one before it has
+    taken its place in the chat's line (`ChatSession.settle_line`), so the line holds them in the
+    order sent even when one takes more than the half second to reach the server, which put them
+    out of order before."""
+    assert held.chat is not None, "the turn did not reach its final render"
+    line = held.chat.settle_line
     responses: list[Any] = [None] * len(requests)
 
     def send(index: int) -> None:
@@ -4340,8 +4349,18 @@ def sent_in_one_settle(held: FinalRender, *requests: Callable[[], Any]) -> list[
             responses[index] = exc
 
     senders = [threading.Thread(target=send, args=(index,)) for index in range(len(requests))]
-    for sender in senders:
+
+    def in_line_or_answered(index: int) -> bool:
+        """Request `index` waits in the line behind those sent before it, or has been answered,
+        which the check below reports."""
+        return len(line) == index + 1 or not senders[index].is_alive()
+
+    for index, sender in enumerate(senders):
         sender.start()
+        wait_until(
+            functools.partial(in_line_or_answered, index),
+            f"request {index + 1} of {len(senders)} to take its place in the chat's line",
+        )
         sender.join(0.5)
     waited = [sender.is_alive() for sender in senders]
     held.release.set()
@@ -4536,7 +4555,9 @@ MINUTES = {
     "setup": 0,
     "by_hand": 0,
 }
-"""`test_chat_timing_route.FOUR`, which this module cannot import: its net is 28.0."""
+"""Quickstart scenario 1's recording, its net 28.0: `test_chat_timing_route` binds it as `FOUR`,
+whose note says why setup and the review by hand are 0. *Changed 2026-11-03 (cycle 24's read-only
+check):* written once, here, where it was a copy of `FOUR`, which this module cannot import."""
 
 
 def traced_writes(monkeypatch: pytest.MonkeyPatch, chat_id: str) -> list[tuple[str, bool]]:
@@ -4588,9 +4609,14 @@ def test_writes_sent_in_one_settle_are_written_one_at_a_time_on_the_chats_worker
     """The writes that waited were released together and each ran in the thread pool, beside the
     others, each saving `session.json` and writing `report.md` (cycle 24's Tier 2 review,
     should-fix 2). A write that waited goes to the chat's worker, in the order it came: two
-    decisions and the minutes are written one after another, and each is kept."""
+    decisions and the minutes are written one after another, and each is kept. *Changed 2026-11-03
+    (cycle 24's read-only check):* each also takes its place out of the chat's line, so a decision
+    sent once they are written is taken at once, in the thread pool (owner decision 69A), and not
+    after the bound behind a place left there, as every later write and snapshot would be."""
     chat_id, held = review_ending
-    first, second = (finding.id for finding in load_session(run_dir / "session.json").findings[:2])
+    first, second, third = (
+        finding.id for finding in load_session(run_dir / "session.json").findings[:3]
+    )
     written = traced_writes(monkeypatch, chat_id)
 
     responses = sent_in_one_settle(
@@ -4613,6 +4639,35 @@ def test_writes_sent_in_one_settle_are_written_one_at_a_time_on_the_chats_worker
     ] == decisions
     assert saved.timing.net_saved_minutes == 28.0
     assert recorded_dispositions(run_dir) == decisions
+    assert held.chat is not None and held.chat.settle_line == []
+    started = time.monotonic()
+    after = client.post(f"/sessions/{chat_id}/findings/{third}/disposition", json=DECISION)
+    took = time.monotonic() - started
+    assert after.status_code == 200, after.text
+    assert took < SETTLE_BOUND_S / 2, f"answered after {took:.3f} s: it waited"
+    assert written[-1] == (third, False)
+
+
+def test_a_request_cancelled_while_it_waits_for_the_settle_takes_its_place_out_of_the_line(
+    app: Any,
+) -> None:
+    """A request whose wait for the settle is cancelled still takes its place out of the chat's
+    line, or every later write and snapshot on the chat would wait out the bound behind it (cycle
+    24's read-only check)."""
+    chat = ChatSession(state=ChatState.RUNNING)
+    chat.settling.set()
+
+    async def cancelled_while_it_waits() -> None:
+        async with anyio.create_task_group() as group:
+            group.start_soon(app.state.server._settled, chat)
+            with anyio.fail_after(TIMEOUT_S):
+                while not chat.settle_line:
+                    await anyio.sleep(0.01)
+            group.cancel_scope.cancel()
+
+    anyio.run(cancelled_while_it_waits)
+
+    assert chat.settle_line == []
 
 
 def test_a_decision_sent_before_a_follow_up_in_one_settle_is_written_before_its_turn(
@@ -4662,8 +4717,13 @@ def test_a_decision_sent_once_the_chat_has_settled_goes_behind_a_follow_up_still
     the settle, goes behind it (cycle 24's Tier 2 review, should-fix 2): a decision sent after a
     follow-up meets the turn the follow-up starts, `409 TurnRunning`, as it would a moment later,
     and is never written beside that turn. Each look at the chat is set a second apart, so the
-    follow-up sees the settle well after the decision arrives."""
+    follow-up sees the settle well after the decision arrives. *Changed 2026-11-03 (cycle 24's
+    read-only check):* the render is let go only once the follow-up has taken its place in the
+    chat's line, which half a second alone did not make sure of: a follow-up slower than that to
+    reach the server came after the settle and after the decision, which was written, `200`."""
     chat_id, held = review_ending
+    assert held.chat is not None
+    line = held.chat.settle_line
     url = disposition_url(chat_id, run_dir)
     provider_control.hold()
     monkeypatch.setattr(chat_server, "POLL_S", SLOW_LOOK_S / 2)
@@ -4674,6 +4734,10 @@ def test_a_decision_sent_once_the_chat_has_settled_goes_behind_a_follow_up_still
         )
     )
     follower.start()
+    wait_until(
+        lambda: len(line) == 1 or not follower.is_alive(),
+        "the follow-up to take its place in the chat's line",
+    )
     follower.join(0.5)
     assert follower.is_alive(), "the follow-up was answered before the chat settled"
     held.release.set()

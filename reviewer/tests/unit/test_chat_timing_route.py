@@ -48,19 +48,16 @@ review_ending = chat.review_ending
 
 PLACEHOLDER = "_The evidence package was not supplied to the renderer._"
 
-FOUR: dict[str, Any] = {
-    "baseline": 45,
-    "supervision": 6,
-    "verification": 9,
-    "false_alarms": 2,
-    "setup": 0,
-    "by_hand": 0,
-}
+FOUR: dict[str, Any] = chat.MINUTES
 """Quickstart scenario 1's recording; the derived net is 28.0.
 
 *Changed 2026-11-01 on purpose (owner decision 183A; 007 T065):* with setup and the review by
 hand recorded as 0, since the net is unknown without them; every figure read from it, here and
-in `test_waiting_answers.py`, keeps its value."""
+in `test_waiting_answers.py`, keeps its value.
+
+*Changed 2026-11-03 on purpose (002 cycle 24's read-only check):* bound to
+`test_chat_server.MINUTES`, its one copy, which that module keeps because it cannot import this
+one; every value is the same, so the next change to the inputs is made once."""
 
 
 @pytest.fixture
