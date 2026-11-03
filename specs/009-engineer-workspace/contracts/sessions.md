@@ -82,6 +82,11 @@ when there is one: each `finding.withdrawn` body of the record's own stream that
 decision it took, in the order they went - those `report.md` names under "Withdrawn with a
 decision" ([data-model.md](../data-model.md) section 8).
 
+*Amended 2026-11-03 (feature 002 cycle 22, roadmap hole H-c-011; its FR-031):* a record that waits
+for no Send ends its `read_only_reason`, after a space, with the words file's `read_only_console`,
+"Record the rest of the triage at the console: swreview disposition.", while a flagged finding -
+every status but a pass - records no outcome, since its decision buttons are off.
+
 ## 5. The chips and choosing one
 
 `<nav id="review-chips">` under the header: one chip per `sessions` item in the host's order, reading
@@ -175,7 +180,11 @@ and restoration rules above.
 - **A restarted backend.** An `init` whose token differs from the one the page holds names another
   backend. A live waiting review on screen is then restored from its folder at once, read-only with
   Send offered (015 FR-042). A review that was not waiting keeps this section's rule: restored when
-  chosen.
+  chosen. *Changed 2026-11-03 (feature 002 cycle 22, roadmap hole H-c-011):* any live review on
+  screen, of whichever document, is restored from its folder at once too, read-only, unless a
+  start, a Send or a re-run is on its way - one mid-turn included, its turn over with the backend
+  that ran it, its chip saying it can no longer be restored when its folder holds no record; a live
+  review not on screen is restored when chosen, as before.
 
 ## 7. The configuration change
 

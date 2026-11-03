@@ -490,6 +490,9 @@ class Words(ReviewModel):
     withdrawn: WithdrawnWords
     read_only_lead: str
     read_only_off: str
+    read_only_console: str
+    """What ends a finished record's read-only line while a flagged finding records no outcome:
+    the console records the rest (`snapshot.restored_snapshot`; 002 FR-031, cycle 22)."""
     goal_states: dict[GoalState, str]
     goal_reasons: dict[GoalReason, str]
     goals: list[Goal]

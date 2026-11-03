@@ -3578,20 +3578,25 @@
         return;
       }
       // Another token is another backend (a Settings save, or a restart after it stopped): no
-      // chat of the old one survives. A live waiting review on screen is restored from its folder
-      // at once, read-only with Send offered (feature 015 FR-042, contracts/pane.md section 7).
-      // `backend.restarted` says so as well (owner decision 143A), and is believed even when the
-      // `init` before this one was read while there was no backend, and so carried no token to
-      // compare: it is kept until an `init` names the new backend - a token other than the one
-      // held when it arrived, since an `init` the host read before the restart names that one.
+      // chat of the old one survives. The live review on screen, of whichever document, is shown
+      // from its folder at once, read-only as a restore after a restart shows it (009 FR-021): a
+      // waiting one with Send offered (feature 015 FR-042, contracts/pane.md section 7), any other
+      // with every control that would post to the old backend off (002 cycle 22, roadmap hole
+      // H-c-011). `backend.restarted` says so as well (owner decision 143A), and is believed even
+      // when the `init` before this one was read while there was no backend, and so carried no
+      // token to compare: it is kept until an `init` names the new backend - a token other than
+      // the one held when it arrived, since an `init` the host read before the restart names
+      // that one.
       var replaced = state.backendReplaced && !!payload.token && payload.token !== state.replacedToken;
       var restarted = replaced || (!!payload.token && !!heldToken && payload.token !== heldToken);
       if (replaced) {
         state.backendReplaced = false;
         state.replacedToken = null;
       }
-      var waiting = restarted && !!state.chatId && state.readOnly === null && waitingForSend()
-        && !state.sending && !state.sendPending;
+      // Not while a start, a Send or a re-run is on its way, which `showReview` refuses; a turn on
+      // screen is no reason not to, since it ran on the backend that went.
+      var shown = restarted && !!state.chatId && state.readOnly === null && !state.startPending
+        && !state.sendPending && !state.rechecking ? state.chatId : null;
       state.providers = payload.providers || state.providers;
       state.backend = payload.backend || null;
       state.token = payload.token || null;
@@ -3627,8 +3632,13 @@
       if (state.backend) {
         loadLabels();
       }
-      if (waiting) {
-        var shown = state.chatId;
+      if (shown) {
+        // Nothing more is asked of the old chat's stream, not even by a reconnect its close left
+        // waiting, should the host keep no record to show the review by; and a turn on screen is
+        // over, so a follow-up still waiting for its answer says it had none.
+        closeStream();
+        unansweredFollowUp('restarted');
+        setTurnRunning(false);
         state.chatId = null;
         showReview(shown);
       } else if (restarted) {
