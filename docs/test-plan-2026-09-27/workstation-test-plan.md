@@ -453,7 +453,7 @@ $H = "$env:LOCALAPPDATA\SwReview\handover\<first day of the sitting, yyyy-MM-dd>
 $since = [datetime]::ParseExact((Split-Path $H -Leaf), 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture)
 $findings = "$H\pane-findings-$(Split-Path $H -Leaf).md"
 New-Item -ItemType Directory -Force "$H\probes", "$H\dumps", "$H\notes", "$H\exports", "$H\kept" | Out-Null
-Set-Alias swreview-extract "$R\extractor\SwReview.Extractor.Console\bin\x64\Release\net48\swreview-extract.exe"
+Set-Alias swreview-extract ([Management.Automation.WildcardPattern]::Escape("$R\extractor\SwReview.Extractor.Console\bin\x64\Release\net48\swreview-extract.exe"))
 $runs = $null
 if (Test-Path "$env:APPDATA\SwReview\settings.json") { $runs = (Get-Content "$env:APPDATA\SwReview\settings.json" -Raw | ConvertFrom-Json).run_root }
 if (-not $runs) { $runs = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'SwReview\runs' }
@@ -607,8 +607,8 @@ function Show-RemodelLedger {
     finally { Pop-Location }
 }
 
-Set-Location $R
-"checkout $R | handover folder $H | run folders $runs | checkout found: $(Test-Path "$R\extractor\tools\update-workstation.ps1")"
+Set-Location -LiteralPath $R
+"checkout $R | handover folder $H | run folders $runs | checkout found: $(Test-Path -LiteralPath "$R\extractor\tools\update-workstation.ps1")"
 ```
 
 Pass: the last line names the checkout, the handover folder and the run folders (the run
@@ -814,7 +814,7 @@ starting `fatal:` before the third: the update did not bring the build this plan
 Then start the findings document, once:
 
 ```powershell
-if (-not (Test-Path $findings)) { Copy-Item "$R\docs\test-plan-2026-09-27\workstation-results.md" $findings }
+if (-not (Test-Path $findings)) { Copy-Item -LiteralPath "$R\docs\test-plan-2026-09-27\workstation-results.md" $findings }
 notepad $findings
 ```
 
@@ -852,7 +852,7 @@ SOLIDWORKS does not list SwReview at all. With SOLIDWORKS closed, open **Windows
 administrator**, signed in as the account that uses SOLIDWORKS, then:
 
 ```powershell
-cd "<the smart_SW folder, as in the setup block>"
+cd -LiteralPath "<the smart_SW folder, as in the setup block>"
 .\extractor\tools\register-addin.ps1
 ```
 
@@ -900,7 +900,7 @@ checks fail when none is running or more than one is (004 research R28.7). If it
 one is running, close the others and run it again.
 
 ```powershell
-cd "$R\reviewer"; uv run swreview seat health; "exit code: $LASTEXITCODE"; cd $R
+cd -LiteralPath "$R\reviewer"; uv run swreview seat health; "exit code: $LASTEXITCODE"; cd -LiteralPath $R
 ```
 
 It prints one `PASS` or `FAIL` line for each check a file can prove, with its reason; then one
@@ -1023,7 +1023,7 @@ then:
 
 ```powershell
 $package = '<paste the -standards run folder>'
-cd "$R\reviewer"; uv run swreview check standards --package $package --out "$H\notes\profile-check" --profile "$env:LOCALAPPDATA\SwReview\standards.yaml"; "exit code: $LASTEXITCODE"; cd $R
+cd -LiteralPath "$R\reviewer"; uv run swreview check standards --package $package --out "$H\notes\profile-check" --profile "$env:LOCALAPPDATA\SwReview\standards.yaml"; "exit code: $LASTEXITCODE"; cd -LiteralPath $R
 ```
 
 Pass: `exit code: 0` (the backend validates the profile; 006 T100). This is also health check 4:
@@ -1062,7 +1062,7 @@ in, the review decides only by Toolbox and the part-number convention, as with t
 1. Write the proposal beside the version 3 file, never over it:
 
    ```powershell
-   cd "$R\reviewer"; uv run swreview profile upgrade "$env:LOCALAPPDATA\SwReview\standards.yaml" --out "$H\notes\standards-v4.yaml"; "exit code: $LASTEXITCODE"; cd $R
+   cd -LiteralPath "$R\reviewer"; uv run swreview profile upgrade "$env:LOCALAPPDATA\SwReview\standards.yaml" --out "$H\notes\standards-v4.yaml"; "exit code: $LASTEXITCODE"; cd -LiteralPath $R
    ```
 
    Pass: `exit code: 0`, and one line before it: the new file's path and `sha256:` with its hash.
@@ -1078,7 +1078,7 @@ in, the review decides only by Toolbox and the part-number convention, as with t
 3. Validate it against step 2.4's `-standards` package (`$package`):
 
    ```powershell
-   cd "$R\reviewer"; uv run swreview check standards --package $package --out "$H\notes\profile-check-v4" --profile "$H\notes\standards-v4.yaml"; "exit code: $LASTEXITCODE"; cd $R
+   cd -LiteralPath "$R\reviewer"; uv run swreview check standards --package $package --out "$H\notes\profile-check-v4" --profile "$H\notes\standards-v4.yaml"; "exit code: $LASTEXITCODE"; cd -LiteralPath $R
    ```
 
    Pass: `exit code: 0`. Fail: `exit code: 1` with a message naming a field, or an entry by its
@@ -1114,7 +1114,7 @@ $pane = Get-Content "$env:APPDATA\SwReview\settings.json" -Raw | ConvertFrom-Jso
 if (-not $pane.api_key_protected) { 'no key is stored: do step 2.5 first' } else {
   $env:OPENAI_API_KEY = [Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($pane.api_key_protected), [Text.Encoding]::UTF8.GetBytes('SwReview.Settings.v1'), 'CurrentUser'))
   if ($pane.model) { $env:SWREVIEW_LIVE_MODEL = $pane.model }
-  cd "$R\reviewer"; uv run pytest tests/live/test_openai_live_prior_reasoning.py -m live -rs -p no:warnings; cd $R
+  cd -LiteralPath "$R\reviewer"; uv run pytest tests/live/test_openai_live_prior_reasoning.py -m live -rs -p no:warnings; cd -LiteralPath $R
   Remove-Item Env:OPENAI_API_KEY, Env:SWREVIEW_LIVE_MODEL -ErrorAction SilentlyContinue
 }
 ```
@@ -2027,7 +2027,7 @@ Record: each pass or fail. Save no configuration change.
    line with its number of minutes from that note (the quotes may stay) and run it:
 
    ```powershell
-   cd "$R\reviewer"; uv run swreview timing $run --baseline '<baseline minutes>' --supervision '<supervision minutes>' --verification '<verification minutes>' --false-alarms '<false-alarm minutes>' --setup '<setup minutes>' --by-hand '<by-hand minutes>'; "exit code: $LASTEXITCODE"; cd $R
+   cd -LiteralPath "$R\reviewer"; uv run swreview timing $run --baseline '<baseline minutes>' --supervision '<supervision minutes>' --verification '<verification minutes>' --false-alarms '<false-alarm minutes>' --setup '<setup minutes>' --by-hand '<by-hand minutes>'; "exit code: $LASTEXITCODE"; cd -LiteralPath $R
    ```
 
    Then, either way:
@@ -2113,7 +2113,7 @@ switch on, at a later sitting, the review asks one same-name question per drawin
 
   ```powershell
   $doc = '<the id exactly as Show-Documents prints it, doc: included>'
-  cd "$R\reviewer"; cmd /c "uv run swreview drawing brief --package ""$run"" --run ""$run"" --document $doc --profile ""$env:LOCALAPPDATA\SwReview\standards.yaml"" > ""%TEMP%\swreview-brief.json"""; "exit code: $LASTEXITCODE"; cd $R
+  cd -LiteralPath "$R\reviewer"; cmd /c "uv run swreview drawing brief --package ""$run"" --run ""$run"" --document $doc --profile ""$env:LOCALAPPDATA\SwReview\standards.yaml"" > ""%TEMP%\swreview-brief.json"""; "exit code: $LASTEXITCODE"; cd -LiteralPath $R
   (Get-Item "$env:TEMP\swreview-brief.json").Length
   Select-String -Path "$env:TEMP\swreview-brief.json" -SimpleMatch '"answers":[{' -Quiet
   $brief = Get-Content "$env:TEMP\swreview-brief.json" -Raw -Encoding UTF8 | ConvertFrom-Json; 'document', 'assembly', 'interfaces', 'drawing', 'answers' | ForEach-Object { "$_ " + ($brief.PSObject.Properties.Name -contains $_) }
@@ -2947,7 +2947,7 @@ owner). The last line deletes step 3.5's Pack and Go copies, so no copy of compa
 ### 6.1 No key reached a file
 
 ```powershell
-cd "$R\reviewer"; uv run swreview audit-secrets $runs "$env:LOCALAPPDATA\SwReview\logs" $H; "exit code: $LASTEXITCODE"; cd $R
+cd -LiteralPath "$R\reviewer"; uv run swreview audit-secrets $runs "$env:LOCALAPPDATA\SwReview\logs" $H; "exit code: $LASTEXITCODE"; cd -LiteralPath $R
 ```
 
 Pass: `exit code: 0` and a line beginning `none: no configured secret appears in`. Read any other
@@ -2966,9 +2966,9 @@ of what it holds and what is missing. It is the quick summary; it is **not** the
 it leaves out `tool-results\` by design (6.3 carries the whole folders).
 
 ```powershell
-cd "$R\reviewer"
+cd -LiteralPath "$R\reviewer"
 Get-ChildItem -LiteralPath $runs -Directory | Where-Object { $_.CreationTime -ge $since -and $_.Name -notmatch '-(check|standards|remodel)$' } | ForEach-Object { uv run swreview handoff $_.FullName --out "$H\exports\$($_.Name).zip" }
-cd $R
+cd -LiteralPath $R
 ```
 
 Pass: one `wrote <archive>` per review and no `Missing artifacts: ` line. Record: the stamp and

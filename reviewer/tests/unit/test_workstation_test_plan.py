@@ -431,8 +431,14 @@ def test_the_plan_starts_the_findings_document_once_the_update_has_brought_the_s
     hands over, and fills it in as each step ends. A checkout older than the sheet has none
     until step 1.3's pull brings it, so the copy is made at step 1.4, after the check that the
     checkout holds the sheet itself - the plan came first, so a checkout can hold the plan and
-    not the sheet; until then step 1 records in `notes\\update.txt`."""
-    copy = r'Copy-Item "$R\docs\test-plan-2026-09-27\workstation-results.md" $findings'
+    not the sheet; until then step 1 records in `notes\\update.txt`.
+
+    *Changed 2026-11-03 on purpose (cycle 19; 007 T093):* the copy reads the sheet from the
+    checkout by `-LiteralPath`, as every read of the checkout does; the check before it, a path
+    relative to the checkout, stays by `-Path` (007 `research.md` R13)."""
+    copy = (
+        r'Copy-Item -LiteralPath "$R\docs\test-plan-2026-09-27\workstation-results.md" $findings'
+    )
     step_1_4 = step(plan, "1.4")
     step_1 = plan[plan.index("## Step 1.") : plan.index("### 1.1 ")]
 
@@ -1711,7 +1717,10 @@ def test_show_remodel_ledger_hands_each_answers_file_to_swreview_remodel_ledger(
     reads the answers file line by line itself; it hands each file to `swreview remodel ledger`,
     the reader another lane builds, from `$R\reviewer` as every `uv run` of the plan runs, and
     still says when a run wrote none. That command is not this test's: `uv` is stood in for by a
-    function that prints what it was asked, so nothing of that lane's runs here."""
+    function that prints what it was asked, so nothing of that lane's runs here.
+
+    *Changed 2026-11-03 on purpose (cycle 19; 007 T093):* the setup block ends by going into the
+    checkout with `Set-Location -LiteralPath $R`."""
     run = tmp_path / "remodel-no-reorder"
     (run / "capabilities").mkdir(parents=True)
     ledger = run / "capabilities" / "remodel-32.5.0.48.yaml"
@@ -1744,7 +1753,7 @@ def test_show_remodel_ledger_hands_each_answers_file_to_swreview_remodel_ledger(
         f"uv run swreview remodel ledger {ledger} | from {reviewer}",
         "no answers file in this folder: the run did not finish",
     ]
-    assert plan.index("function Show-RemodelLedger ") < plan.index("Set-Location $R")
+    assert plan.index("function Show-RemodelLedger ") < plan.index("Set-Location -LiteralPath $R")
 
 
 FEATUREWORKS_LINE = re.compile(
@@ -2245,7 +2254,10 @@ def test_show_findings_by_type_prints_each_groups_rows_in_the_reports_order(
     """Feature 013 T057 (007 T059 as 013 changed it): the pane's grouped list and the check
     tabs' Start here rows are compared with `report.md`'s Findings by type, so the helper
     prints each group of that section and its rows' ids in its order, for a review's folder
-    and a check folder alike."""
+    and a check folder alike.
+
+    *Changed 2026-11-03 on purpose (cycle 19; 007 T093):* the setup block ends by going into the
+    checkout with `Set-Location -LiteralPath $R`."""
     run = tmp_path / fixture
     shutil.copytree(FIXTURES / "attention" / fixture, run)
     rerender_run_folder(run)
@@ -2254,7 +2266,7 @@ def test_show_findings_by_type_prints_each_groups_rows_in_the_reports_order(
 
     assert lines == expected_groups(run)
     assert any(line.split(": ", 1)[1] != "no row" for line in lines)
-    assert plan.index("function Show-FindingsByType ") < plan.index("Set-Location $R")
+    assert plan.index("function Show-FindingsByType ") < plan.index("Set-Location -LiteralPath $R")
 
 
 @pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
@@ -2600,7 +2612,10 @@ def test_s1s_steps_hold_what_s1_asks_of_them(plan: str) -> None:
     """Step 1.3 names 004 T140's one test, which the C# gate runs unnamed; step 1.6 runs
     `swreview seat health` (decision 166A, another lane's command, only pasted here); step 1.7
     keeps the product name 004 T164 still needs; step 3.9 runs PROBE-15 on part J (003 T088); and
-    004's tasks say what is left of T140 and T164 (004 T365)."""
+    004's tasks say what is left of T140 and T164 (004 T365).
+
+    *Changed 2026-11-03 on purpose (cycle 19; 007 T093):* step 1.6's line goes into
+    `$R\\reviewer` and back to the checkout by `cd -LiteralPath`."""
     tasks = (FEATURE_004 / "tasks.md").read_text(encoding="utf-8")
     [t140] = [line for line in tasks.splitlines() if line.startswith("- [ ] T140 ")]
     [t164] = [line for line in tasks.splitlines() if line.startswith("- [ ] T164 ")]
@@ -2617,9 +2632,10 @@ def test_s1s_steps_hold_what_s1_asks_of_them(plan: str) -> None:
         encoding="utf-8"
     )
     assert ("004", "T140") in qualified_tasks(step(plan, "1.3"))
-    assert 'cd "$R\\reviewer"; uv run swreview seat health; "exit code: $LASTEXITCODE"; cd $R' in (
-        step(plan, "1.6")
-    )
+    assert (
+        'cd -LiteralPath "$R\\reviewer"; uv run swreview seat health; "exit code: $LASTEXITCODE";'
+        " cd -LiteralPath $R"
+    ) in step(plan, "1.6")
     assert "In S1 only the product" in re.sub(r"\s+", " ", step(plan, "1.7"))
     assert (
         'swreview-extract probe rms --doc "<full path of part J>" | Out-File -FilePath '
@@ -3193,7 +3209,13 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
 
     *Changed 2026-11-03 on purpose (007 T091; cycle 18, minutes typed on the Review page):* 007's
     row is recounted with T087 to T091 ticked, the minutes typed on the Review page built: 86 done,
-    5 open."""
+    5 open.
+
+    *Changed 2026-11-03 on purpose (007 T092; cycle 19):* 007's row is recounted with cycle 19's
+    tasks, T092 to T095, T092 ticked: 87 done, 8 open.
+
+    *Changed 2026-11-03 on purpose (007 T095; cycle 19):* 007's row is recounted with T093 to T095
+    ticked, the checkout read literally at the seat built: 90 done, 5 open."""
     readme = (REPO / "specs" / "README.md").read_text(encoding="utf-8")
     flat = re.sub(r"\s+", " ", readme)
     rows = {line[2:5]: line for line in readme.splitlines() if re.match(r"^\| \d{3} \|", line)}
@@ -3210,7 +3232,7 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
         assert "Closed on 2026-10-31 (decision 173A)" in rows[number], number
         assert closed in rows[number].split("Closed on 2026-10-31")[1], number
     assert "| 393 / 22 / 0 |" in rows["004"]
-    assert "| 86 / 5 / 0 |" in rows["007"]
+    assert "| 90 / 5 / 0 |" in rows["007"]
     assert "T180" not in rows["004"]
     for task in ("T182", "T187", "T303a", "T303b", "T353"):
         assert re.search(rf"\b{task}\b", rows["004"]), task
@@ -4217,7 +4239,10 @@ def test_save_timing_note_reads_the_run_folder_and_the_backend_log_and_writes_on
     writes one, appending to `$H\\notes\\timing.txt`, with no other command that writes. What
     `Show-ReviewFacts` and `Show-SetupTime` print is kept in the block, never printed; the
     function prints the note's path, or why it wrote nothing, and no figure; and it calls no
-    model."""
+    model.
+
+    *Changed 2026-11-03 on purpose (cycle 19; 007 T093):* the setup block ends by going into the
+    checkout with `Set-Location -LiteralPath $R`."""
     function = plan_function(plan, "Save-TimingNote")
     setup = section(plan, "Every PowerShell window: paste this first")
     lines = [line.strip() for line in function.splitlines()]
@@ -4226,7 +4251,7 @@ def test_save_timing_note_reads_the_run_folder_and_the_backend_log_and_writes_on
         setup.index("function Show-ReviewFacts ")
         < setup.index("function Show-SetupTime ")
         < setup.index("function Save-TimingNote ")
-        < setup.index("Set-Location $R")
+        < setup.index("Set-Location -LiteralPath $R")
     )
     assert lines[1] == "param([string] $run, [string] $letter)"
     assert sorted(set(re.findall(r'"(\$\w+\\[^"$]+)"', function))) == [
@@ -4424,8 +4449,6 @@ NO_DOCUMENT_NAME = {
     "$env:LOCALAPPDATA": "the account's local application data, in its profile",
     "$env:APPDATA": "the account's roaming application data, in its profile",
     "$env:TEMP": "the account's temporary folder, in its profile",
-    "$R": "the checkout: a bracket in its path fails the setup block's own check",
-    "<the smart_SW folder, as in the setup block>": "the checkout, as $R",
     "<where the owner put the new file>": "the standards profile the owner hands over",
     "$k": "a registry key",
     "$wer": "a registry key",
@@ -4433,7 +4456,15 @@ NO_DOCUMENT_NAME = {
 """Each name a command of the plan's PowerShell may still give by `-Path`, and why. None holds a
 document's name. The account's folders lie in its profile, named after the Windows account, whose
 name cannot hold `[` or `]`, and so does the handover folder, named by its date; the checkout is
-left as a note in `docs/review-backlog.md`, cycle 14 (007 T085, 2026-11-02)."""
+left as a note in `docs/review-backlog.md`, cycle 14 (007 T085, 2026-11-02).
+
+*Changed 2026-11-03 on purpose (cycle 19; 007 T093):* the checkout, `$R`, and step 1.5's
+placeholder for it are exempt no more. A bracket in the checkout's path does not always fail the
+setup block's check: beside a folder the brackets match, `Set-Location $R` went into that folder
+and the check passed there. A path relative to the checkout, as step 1.4's `Test-Path docs\\...`,
+gives no name and stays by `-Path`: Windows PowerShell 5.1 resolves a relative
+`-LiteralPath` against the current folder escaped, and finds nothing in a folder whose path holds
+brackets (007 `research.md` R13)."""
 REFERENCE = re.compile(r"\$(?:env:\w+|_\.\w+|\w+)|<[^<>\n]+>")
 """A name a command's arguments give: a variable (`$run`, `$env:APPDATA`, `$_.FullName`) or a
 placeholder (`<paste the run folder>`)."""
@@ -4451,7 +4482,11 @@ def test_every_path_the_plans_powershell_builds_from_a_run_or_check_folder_is_li
     listing of the run root `$runs`, the folder the engineer types in the pane, which a bracket
     left empty with no error. A command gives a path by `-Path` only when every name it gives is
     in `NO_DOCUMENT_NAME`, each of which one does, or when it only cuts the string, as
-    `Split-Path $run -Leaf` does, which Windows PowerShell 5.1 refuses with `-LiteralPath`."""
+    `Split-Path $run -Leaf` does, which Windows PowerShell 5.1 refuses with `-LiteralPath`.
+
+    *Changed 2026-11-03 on purpose (cycle 19; 007 T093):* with the checkout out of
+    `NO_DOCUMENT_NAME`, every command that names it - `$R`, or step 1.5's placeholder - reads it
+    by `-LiteralPath` too, the steps' `cd` among them."""
     blocks, written = (
         [(match[1], match[2].strip()) for text in texts for match in PATH_CMDLET.finditer(text)]
         for texts in (POWERSHELL_BLOCK.findall(plan), INLINE_CODE.findall(FENCED.sub("", plan)))
@@ -4521,4 +4556,65 @@ def test_step_5_3_finds_the_remodel_folder_under_a_run_root_whose_name_holds_bra
 
     assert run_powershell(f"$runs = '{quoted}'\n{block}\n", tmp_path) == [
         "remodel folder 20261101-101500 | copies in it: 1"
+    ]
+
+
+# --- every read of the checkout (the backlog's third item, cycle 14; cycle 19) -------------------
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+@pytest.mark.parametrize(
+    ("folder", "beside"),
+    [("repos", None), ("repos [1]", None), ("repos [1]", "repos 1")],
+    ids=["plain", "brackets", "brackets beside a folder they match"],
+)
+def test_the_setup_block_finds_a_checkout_whose_path_holds_brackets(
+    plan: str, tmp_path: Path, folder: str, beside: str | None
+) -> None:
+    """Cycle 14's own findings, the backlog's third item (007 T093, cycle 19, 2026-11-03): the
+    setup block read the checkout `$R` by `-Path`, which reads `[1]` as a wildcard for the one
+    character `1`. In a folder whose name holds brackets, `Set-Location $R` printed a red `Cannot
+    find path` and the check `checkout found: False`; beside a folder the brackets match, holding
+    a checkout of its own, the block went into that folder with no red line, the check passed
+    there, and the alias named that folder's `swreview-extract.exe`. Read literally - by
+    `-LiteralPath`, and the alias by its path escaped - the block's three reads of the checkout
+    name the checkout itself, whatever its path holds; the pin above holds every other command
+    that names it to `-LiteralPath`."""
+    [block] = POWERSHELL_BLOCK.findall(section(plan, "Every PowerShell window: paste this first"))
+    reads = [
+        line
+        for line in block.splitlines()
+        if line.startswith(("Set-Alias swreview-extract ", "Set-Location ", '"checkout $R '))
+    ]
+    console = Path(
+        "extractor", "SwReview.Extractor.Console", "bin", "x64", "Release", "net48",
+        "swreview-extract.exe",
+    )
+    checkouts = [tmp_path / name / "smart_SW" for name in (folder, beside) if name]
+    for checkout in checkouts:
+        for file in (console, Path("extractor", "tools", "update-workstation.ps1")):
+            (checkout / file).parent.mkdir(parents=True, exist_ok=True)
+            (checkout / file).write_bytes(b"")
+    checkout = checkouts[0]
+    handover, runs = tmp_path / "handover", tmp_path / "runs"
+    quoted = {
+        name: str(path).replace("'", "''")
+        for name, path in (("R", checkout), ("H", handover), ("runs", runs))
+    }
+    script = "\n".join([
+        f"$R = '{quoted['R']}'",
+        f"$H = '{quoted['H']}'",
+        f"$runs = '{quoted['runs']}'",
+        *reads,
+        "(Get-Location).Path",
+        "(Get-Alias swreview-extract).ResolvedCommand.Path",
+        "",
+    ])
+
+    assert len(reads) == 3
+    assert run_powershell(script, tmp_path) == [
+        f"checkout {checkout} | handover folder {handover} | run folders {runs}"
+        " | checkout found: True",
+        str(checkout),
+        str(checkout / console),
     ]
