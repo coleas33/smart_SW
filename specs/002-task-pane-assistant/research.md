@@ -7282,12 +7282,17 @@ the decision register now records 160A as done.
     notice. The events contract takes the key on the `finding` body; 001's `Finding`, still one list
     of the model's fields, is closed where it is used rather than where it is defined
     (`unevaluatedProperties: false` beside each `$ref`), so a session's finding still takes no other
-    key. The scorer reads a withdrawn finding's body without it.
+    key. The scorer reads a withdrawn finding's body without it. *Since 2026-11-02 (the review,
+    below):* the key is on every `finding` body, null while no finding records a triage, and the
+    page changes the tally on a `finding` event only when the body names it, so an older
+    backend's finding, which never does, leaves the tally shown (009 FR-030).
   - **The labels race.** The page waits for the labels before the first draw: `loadLabels` keeps its
     read, and the two restore reads, the live snapshot's and the run folder's, draw their snapshot
     once it has answered, a failed read included (009 FR-030). Drawing the cards again when the
     labels land was the other way; it would have to redraw every part the words reach, and a
-    re-init's read would redraw a card under a note being typed.
+    re-init's read would redraw a card under a note being typed. *Since 2026-11-02 (the review,
+    below):* a restore read that fails otherwise than `UnknownChat` or `UnknownReview` draws its
+    error card through the same wait (`restoreFailed`), so the card says its next step.
   - **The read-only line.** The backend's words: the call to decide again, which ends each of the six
     cleared lines, is one key, `rerun.decide_again`; `RerunWords.of` appends it, so every line keeps
     its bytes, and `RerunWords.read_only` leaves it out. A read-only snapshot names each cleared line
@@ -7328,12 +7333,19 @@ the decision register now records 160A as done.
   want of its change ([tasks.md](tasks.md), T370 and T372); a mutant that drew the run folder's
   snapshot without waiting for the labels failed the labels fact's read-only half (T373).
 - **Left open**:
-  - A labels read that never answers holds a restore with it; both reads go to the one loopback
-    backend, and a read that fails lets the snapshot through.
+  - A labels read that never answers holds a restore with it, and since the review a failed
+    restore read's error card too; both reads go to the one loopback backend, and a read that
+    fails lets the snapshot through.
   - Only the two restore reads wait: a Review pressed before a reload's labels read answers, and a
     Check again's snapshot (`showRechecked`), which Send reaches from a review already drawn, do not.
   - A re-run announced under its own id is counted not recorded until its fold, as its card is
-    shown until then; the fold's announcement counts what the fold left.
+    shown until then; the fold's announcement counts what the fold left. So mid-turn the tally
+    counts "not recorded" one too many for each re-run of a check whose finding already has a
+    triage. The owner's call; the review left it for later
+    ([`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 13).
+  - A read-only restore's withdrawal line names a finding the page never shows: no
+    "F-007 recorded: <title>" line precedes it, and `report.md`'s "Withdrawn with a decision" has
+    the same gap. Left for later by the review (the backlog's cycle 13 section).
   - `report.md`'s cleared line keeps the call to decide again: it is the run's record, not a view
     with locked buttons. H-g-010's row in [`docs/roadmap/holes.md`](../../docs/roadmap/holes.md) is
     for the roadmap's next update run.
@@ -7349,3 +7361,16 @@ the decision register now records 160A as done.
   - The link check over the cycle's ten changed Markdown files, anchors included, none broken;
     every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
     ran.
+  - *Changed 2026-11-02:* this tree came before the Tier 2 review's fixes (below), whose own
+    gates T374's dated sub-item records.
+- **Review** (Tier 2, decision 180A; 2026-11-02): one review, no must-fix; two should-fix, each
+  taken test first with the default stated, as T374's dated sub-item records. The page showed a
+  `finding` event's tally on every `finding` event, so with a backend of cycles 7 to 12, which never
+  puts a tally there, a resumed or follow-up turn's findings hid the tally until `session.ended`:
+  every `finding` body now names the key, null while no finding records a triage, and the page
+  changes the tally only when a body names it (*Settled*, the finding's tally). And a restore read
+  that failed otherwise than `UnknownChat` or `UnknownReview` before the labels answered drew its
+  error card with no next step, never drawn again: it now waits for the labels as a snapshot does
+  (*Settled*, the labels race). Two points are left for later in the backlog's cycle 13 section,
+  each under *Left open* above: the restored withdrawal line's unnamed finding, and the mid-turn
+  overcount, which is the owner's call.
