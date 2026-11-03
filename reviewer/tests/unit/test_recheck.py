@@ -2599,7 +2599,12 @@ def test_a_second_check_again_still_names_what_the_first_did_not_carry(
     and names both in its `coverage.recheck` row. That re-run waits in turn - its Send failed on a
     bad key, say, and saving the key restarted the backend - and a second Check again, with the
     profile the first had, has nothing of its own to name, yet names both still: in its new chat's
-    snapshot, its record, the `report.md` it wrote and a restarted backend's restore."""
+    snapshot, its record, the `report.md` it wrote and a restarted backend's restore.
+
+    *Changed 2026-11-02 on purpose (015 T123; cycle 12's Codex review):* the second Check again
+    names the Reject in the waiting review's session, in full, since its id is that record's and
+    not the first re-run's, the second's earlier record; the profile, which names no id, as
+    before."""
     folder = run_root / "FICT-recheck-chain"
     waiting = earlier_with_profile(app, client, folder, profile=True)
     finding = next(f for f in waiting.run.session.findings if f.check == REJECTED_CHECK)
@@ -2612,9 +2617,11 @@ def test_a_second_check_again_still_names_what_the_first_did_not_carry(
     now.write_text(
         without_data_card_properties(waiting.fixture.profile.read_text("utf-8")), "utf-8"
     )
-    row = runner.NOT_CARRIED.format(
+    reject = f"the Reject of {finding.id} (its finding is no longer raised)"
+    row = runner.NOT_CARRIED.format(items="; ".join([reject, runner.NOT_CARRIED_PROFILE]))
+    later = runner.NOT_CARRIED.format(
         items="; ".join([
-            f"the Reject of {finding.id} (its finding is no longer raised)",
+            f"{reject} in session {waiting.run.session.session_id}",
             runner.NOT_CARRIED_PROFILE,
         ])
     )
@@ -2626,15 +2633,15 @@ def test_a_second_check_again_still_names_what_the_first_did_not_carry(
         assert twice.status_code == 201, twice.text
         snapshot = again.get(f"/sessions/{twice.json()['chat_id']}/snapshot")
         assert snapshot.status_code == 200, snapshot.text
-        assert recheck_reasons(snapshot.json()) == [row]
+        assert recheck_reasons(snapshot.json()) == [later]
 
-    assert recheck_row(load_session(folder / "session.json")) == [row]
+    assert recheck_row(load_session(folder / "session.json")) == [later]
     report = (folder / "report.md").read_text(encoding="utf-8").splitlines()
     assert [line for line in report if line.startswith("| coverage.recheck |")] == [
-        f"| coverage.recheck | none | {row} |  |"
+        f"| coverage.recheck | none | {later} |  |"
     ]
     restored = chat.restored_snapshot_of(run_root, provider_control, models, folder.name)
-    assert recheck_reasons(restored) == [row]
+    assert recheck_reasons(restored) == [later]
 
 
 # --- cycle 12's Codex review (015 T123) -------------------------------------------------------
@@ -2725,6 +2732,55 @@ def test_a_chain_of_check_agains_names_each_withdrawal_with_the_session_that_wit
         ]
     finally:
         last.close()
+
+
+def test_a_chain_of_check_agains_names_the_session_of_each_earlier_item_with_an_id(
+    bare: Any,
+) -> None:
+    """015 T123 (cycle 12's Codex review), on the runner: the earlier record is itself a re-run,
+    checked again from session S, and its `coverage.recheck` row named S's Reject of F-007 and its
+    answer to ER-002, the Standards profile, and first a Defer of F-003 that a re-run before it had
+    named in session T. The re-run names again each of S's items, whose ids are S's, in session S,
+    in full as that record's `report.md` heads itself; the one in session T as it was; and the
+    profile, which names no id, as it was. Then its own: the Reject of the earlier record's own
+    F-007, another finding than S's F-007, so named apart from it."""
+    run, earlier, _ = bare
+    before, older = UUID(int=21), UUID(int=20)
+    earlier.findings[:] = [coaxial("F-007", "hol:0002", "rejected")]
+    gone = runner.NOT_CARRIED_DECISION_GONE.format(decision="Reject", id="F-007")
+    answer = runner.NOT_CARRIED_ANSWER_GONE.format(id="ER-002")
+    deferred = runner.NOT_CARRIED_DECISION_GONE.format(decision="Defer", id="F-003")
+    earlier.coverage.unresolved.append(
+        CoverageItem(
+            check="coverage.recheck",
+            scope=CoverageScope(),
+            reason=runner.NOT_CARRIED.format(
+                items="; ".join([
+                    f"{deferred} in session {older}",
+                    gone,
+                    answer,
+                    runner.NOT_CARRIED_PROFILE,
+                ])
+            ),
+            error=None,
+        )
+    )
+    assert earlier.model_status is not None
+    earlier.model_status = earlier.model_status.model_copy(update={"rechecked_from": before})
+
+    run.carry_from(earlier)
+
+    assert recheck_row(run.session) == [
+        runner.NOT_CARRIED.format(
+            items="; ".join([
+                f"{deferred} in session {older}",
+                f"{gone} in session {before}",
+                f"{answer} in session {before}",
+                runner.NOT_CARRIED_PROFILE,
+                gone,
+            ])
+        )
+    ]
 
 
 def _request(request_id: str, question: str, *, answer: str | None = None) -> EvidenceRequest:
