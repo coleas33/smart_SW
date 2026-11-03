@@ -8521,6 +8521,14 @@ command - and a save in that instant failed.
     publisher meets `ContextStoreBusy` for up to 1.88 s more, as during any publish; and a backend
     asked to stop finalizes its live reviews inside the add-in's 5 s grace
     (`BackendProcess.StopGrace`), where a save still waiting at the kill is cut, as any save is.
+    *Corrected 2026-11-03 (the Tier 2 review, should-fix 3):* a wait does hold other requests.
+    The engineering-context routes share one lock, `EngineeringContextServer._lock`, a single
+    RLock for the backend, which `_mutate` holds across `publish` and its `write_atomic`: a
+    publish that waits holds up every context inspect, every other run's context write and every
+    review start that carries context (`_attachment_of`, `validate_prepared_review`) for up to
+    1.88 s, and a second publisher in the same backend waits on that lock; only another process's
+    meets `ContextStoreBusy`. A delay, never a lost write. Since the review, a run's saves and a
+    check folder's accepts take turns as well (below).
 - **Built** (2026-11-03; T410 and T411 in [tasks.md](tasks.md), Phase 40, the tests written first):
   - `reviewer/src/swreview/atomic.py` (T411): `write_atomic` replaces through `_replace`, which
     tries `os.replace` again after each of `REPLACE_WAITS_S` while it is refused with a
@@ -8539,8 +8547,41 @@ command - and a save in that instant failed.
   - A reader that holds a record past 1.88 s - an editor or a preview that keeps it open - still
     fails the save, as before; and a target the replace can never take, a read-only file or a
     folder, which Windows also answers with `ERROR_ACCESS_DENIED`, fails 1.88 s later than before.
+    *Changed 2026-11-03 (the Tier 2 review, should-fix 2):* a read-only file or a folder at the
+    target's name now raises at once; an access list that denies the write cannot be told from a
+    held file, and still fails 1.88 s later (`docs/review-backlog.md`, cycle 25).
   - `benchmark/report_page.py`'s own replace of its staged `index.html` is not `write_atomic`'s,
     and is unchanged.
+  - *Added 2026-11-03 (the Tier 2 review, should-fix 4):* a Retry's rotation moves `session.json`,
+    `attention.json` and the stream aside with a plain rename (`chat/server.py`,
+    `_rotate_previous`; a re-run's stream, `_rotate_kept`), which Windows refuses at once,
+    WinError 32, while a reader holds the file without sharing delete - any Python reader, cycle
+    17's match among them - so a Retry in that instant fails. Not `write_atomic`'s, so left
+    (`docs/review-backlog.md`, cycle 25).
+- **Tier 2 review** (T412; 2026-11-03): one must-fix and four should-fix, fixed test first where
+  they lay in the cycle's change ([tasks.md](tasks.md), T412's sub-item), the rest in
+  `docs/review-backlog.md`'s cycle 25 section:
+  - **A save that waited out a reader never lands over a later one** (the must-fix). The pane runs
+    a decision, minutes and Stop's close on the thread pool, an accept's re-run too, and nothing
+    ordered their saves: an earlier save that met a reader could land after a later one, and the
+    later decision, the review's end or the second exception was gone from the record while the
+    views showed it. `ReviewRun` now holds one lock, `_writing`, from each save's snapshot of the
+    session to the last view written from it - the whole of `write_views`, and `finalize`'s
+    ranking, usage, save and record - and an accept and the check's re-run run as one call under
+    one lock per check folder (`ChatServer._accept_and_recheck`).
+  - **The defaults taken.** The run's lock is reentrant, and `finalize`'s presentation pass stays
+    outside it, so no save waits on a model call. A folder's lock is made the first time an
+    accept reaches the folder and kept for the backend's life. A check run (`POST /checks/rms` or
+    `/checks/standards`) takes none: the host makes each check its own folder
+    (`RunFolders.CreateForCheck`). A target no wait lets through, a folder at its name or a file
+    marked read-only, raises at once (should-fix 2); an absent one, a first write whose temporary
+    is held, is waited for as before.
+  - What the engineer sees: a decision, minutes or Stop pressed while an earlier save of the same
+    review waits out a reader waits for it, up to 1.88 s, before its own; a record that can never
+    be replaced fails at once, as before cycle 25.
+  - **The rest fixed.** `test_atomic.py` records the writer's waits through its own `time`, so
+    another thread's sleep is neither recorded nor cut short, and its real reader test proves the
+    wait (should-fix 1); the callers' paragraph above is corrected (should-fix 3).
 - **Gates** (T412; 2026-11-03), on the cycle's final tree:
   - The whole non-live suite, the tokenizer required, on Python 3.12.3: 19,005 passed and 5
     skipped, 9 of them this cycle's new cases; its two warnings are neither of this cycle's, and
@@ -8555,4 +8596,6 @@ command - and a save in that instant failed.
   - The link check over the cycle's four changed Markdown files, anchors included, 444 links and
     none broken; every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or
     live test ran.
+  - *Changed 2026-11-03:* that tree came before the Tier 2 review's fixes; their gates are T412's
+    sub-item in [tasks.md](tasks.md).
   - The whole suites on the final tree: recorded once they run.
