@@ -142,7 +142,7 @@ from swreview.checks.standards.run import (
 )
 from swreview.engineering_context.models import ContextArtifact
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewException
-from swreview.findings import TRIAGES
+from swreview.findings import TRIAGES, Finding
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
 from swreview.remodel.artifacts import grade_side_of
@@ -397,16 +397,23 @@ class DispositionRefusal(ChatError):
     finding's disposition as the record holds it, `disposition`, beside the contract's three keys
     (002 cycle 23): the page draws the card's record from it, not from its own, which a decision
     another client recorded may have overtaken once its stream closed. Only these bodies carry the
-    key, as only an evidence refusal's carries `request_id`."""
+    key, as only an evidence refusal's carries `request_id`.
+
+    *Changed 2026-11-03 (cycle 23's Tier 2 review):* the body also names the review's triage
+    tally, `triage_tally`, while some finding records a triage, as the 200 reply does
+    (`with_triage_tally`), read with the disposition, so the page shows the tally the record leaves
+    beside the record it draws."""
 
     status = 409
 
-    def __init__(self, message: str, *, disposition: dict[str, Any] | None) -> None:
+    def __init__(
+        self, message: str, *, disposition: dict[str, Any] | None, findings: Sequence[Finding]
+    ) -> None:
         super().__init__(message)
-        self.disposition = disposition
+        self.record = with_triage_tally({"disposition": disposition}, findings)
 
     def body(self) -> dict[str, Any]:
-        return {**super().body(), "disposition": self.disposition}
+        return {**super().body(), **self.record}
 
 
 class IllegalTransition(DispositionRefusal):
@@ -1698,7 +1705,9 @@ class ChatServer:
             raise InvalidTriage(str(exc)) from exc
         except ValueError as exc:
             refusal = DISPOSITION_REFUSALS.get(type(exc), IllegalTransition)
-            raise refusal(str(exc), disposition=self._recorded(run, finding_id)) from exc
+            raise refusal(
+                str(exc), disposition=self._recorded(run, finding_id), findings=run.session.findings
+            ) from exc
         # The review's triage tally beside the finding, while one is recorded (002 cycle 7): after
         # the session's end the page's stream is closed, so the reply is what tells it.
         reply = with_triage_tally(finding.model_dump(mode="json"), run.session.findings)

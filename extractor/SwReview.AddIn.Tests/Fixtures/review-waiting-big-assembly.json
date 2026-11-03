@@ -81,7 +81,7 @@
       "CheckRunning": "A Model check or Standards check is in progress. Wait for it to finish, then try again.",
       "ContextExpired": "The document or saved evidence changed. Extract context evidence again.",
       "ContextPreparationFailed": "Evidence could not be extracted. Check that the part or assembly is saved and loaded, then extract context evidence again.",
-      "DecisionAlreadyRecorded": "That decision is already recorded, so nothing changed.",
+      "DecisionAlreadyRecorded": "That decision is already recorded, so nothing changed. An Accept or a Reject is final; a Defer still needs one of them when you decide.",
       "DocumentChanged": "The active document or its configuration changed while the review was starting, so the review did not start. Make the part or assembly and the configuration you want reviewed active, then press Review again.",
       "DocumentDirty": "Save the part first. Remodel never saves the open document for you.",
       "DrawingActive": "Keep the drawing open in SOLIDWORKS and activate the part or assembly it documents. Press Review with that model active; Review reads open drawings whose views show the model.",

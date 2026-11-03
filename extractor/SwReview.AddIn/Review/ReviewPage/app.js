@@ -446,9 +446,11 @@
             refusal.requestId = parsed.request_id;
           }
           // A refused decision names the finding's disposition as the record holds it, or null (002
-          // cycle 23), so the card is drawn from the backend's record, not from this page's.
+          // cycle 23), so the card is drawn from the backend's record, not from this page's, and the
+          // review's tally beside it, as a reply does (cycle 23's Tier 2 review).
           if (parsed && typeof parsed.disposition === 'object') {
             refusal.recorded = parsed.disposition;
+            refusal.tally = parsed.triage_tally;
           }
           throw refusal;
         }
@@ -2779,6 +2781,10 @@
       body.triage = picked.getAttribute('data-triage');
     }
     cardStatus(card, 'Recording ' + decision + '...', false);
+    // The record the card holds as this press is made, which its refusal's record replaces only
+    // while it still stands (cycle 23's Tier 2 review).
+    var pressedOn = entryOf(card);
+    var held = pressedOn ? pressedOn.body.disposition : null;
 
     // `by` is left to the backend, which attributes the disposition to the session's engineer:
     // the page has no idea who is at the workstation and must not invent one.
@@ -2810,11 +2816,15 @@
       // press is refused is the backend's rule; the page compares nothing. The note box keeps what
       // was typed: the backend never read it, so the retry sends it (cycle 11's Tier 2 review). A
       // refusal of the record names it as it stands, which a decision another client recorded may
-      // have changed since this page drew the card, so that is the record shown (002 cycle 23).
-      if (error.recorded !== undefined) {
-        showDisposition(card, error.recorded, true);
-      }
+      // have changed since this page drew the card, so that is the record shown (002 cycle 23), with
+      // the review's tally, as a reply's (cycle 23's Tier 2 review) - but only over the record the
+      // card held at the press: each reply comes back on a task of its own and the events on the
+      // stream, so a record drawn since came from a later write, which the refusal may predate.
       var entry = entryOf(card);
+      if (error.recorded !== undefined && entry && entry.body.disposition === held) {
+        showDisposition(card, error.recorded, true);
+        showTally(error.tally);
+      }
       var recorded = entry ? entry.body.disposition : null;
       render.pressTriage(card, recorded ? recorded.triage : null);
       cardError(card, error, error.errorClass + ': ' + error.message);
