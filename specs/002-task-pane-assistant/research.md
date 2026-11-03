@@ -8326,3 +8326,42 @@ note box from the record, losing a note typed for the press.
     lower cycle's first; 002's row is 393 / 7 / 0 at T401 and 396 / 4 / 0 at the close, the pane
     fixtures regenerate as git merged them, and the sha256 pin moved with them. T404's sub-item of
     the stacking in [tasks.md](tasks.md) names each meeting.
+
+### Cycle 24. A decision pressed as a review ends is not refused `TurnRunning` (2026-11-03)
+
+The owner's pick on 2026-11-03 from roadmap run 6's brief: the cycle 18 item of
+[`docs/review-backlog.md`](../../docs/review-backlog.md) at `server.py:2714`. Tier 2, no decision
+id. The runner sends `session.ended` from `finalize`; the chat server's worker then writes
+`report.md` and the attention record, and only afterwards moves the chat out of `running`
+(`_play`). So for that moment every write the page made on a review it showed finished met
+`409 TurnRunning`, "Wait for it to finish, or press Stop", while Results said the review had
+finished and Stop was off. The order is deliberate, and it stays: the folder stays claimed until
+both files are written, so a Retry that starts after `ended` cannot rotate the session under them.
+
+- **Settled**, the defaults taken inside the feature:
+  - **Which writes.** Every route that refuses a running turn, through the one check they share,
+    `ChatServer._require_idle`: a decision with its triage and note (`disposition`), the minutes
+    (`timing`), a follow-up (`messages`), answers (`evidence` and `evidence/{request_id}`) and
+    Send (`send`). The page can press each on a review it shows finished, and a follow-up,
+    answers or Send that waits starts its turn only once the chat has settled, so no new turn
+    starts before the two files are written. A Retry (`POST /sessions` naming `retry_of`) is not a
+    write on the review: it is still `409 RunDirInUse` until the folder is released.
+  - **When a write waits.** From the moment the turn's action has returned until the chat has
+    settled: `ChatSession.settling`, which `_play` sets before it writes the two files and clears
+    once it has moved the chat. The session's `ended_at` is not the sign: a turn just started still
+    holds the last turn's until the runner clears it, and Send writes the views before that, so a
+    write then would wait out the bound before meeting the refusal it is owed at once.
+  - **How long.** `SETTLE_WAIT_S`, 5 s, named in [contracts/chat-api.md](contracts/chat-api.md):
+    the route looks at the chat at the event stream's rate (`POLL_S`) until it leaves `running` or
+    the bound passes. The final render of feature 008's big-assembly replay review, 96 findings,
+    took 31 ms cold and 8 ms warm on the development machine, so the bound is a slow seat's margin,
+    and well inside the 120 s the pane's proxy gives a call.
+  - **Then.** The route goes on as it would a moment later, asking the chat's state again: a turn
+    that failed is `409 SessionFailed`, and a write on a review that now waits for Send goes to the
+    chat's worker, as before. Past the bound, and while a turn still runs, the refusal is today's
+    `409 TurnRunning`, its message and sentence unchanged, so no words change.
+  - **`report.md`.** A write that waited re-renders `report.md` and the attention record as it
+    does today (`record_disposition`, `record_timing_live`), after the turn's own render, so both
+    show it.
+  - **The page.** No change. The minutes form's one retry of a refused save stays: past the bound
+    it can still be reached.
