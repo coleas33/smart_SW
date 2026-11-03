@@ -4434,14 +4434,16 @@ def test_step_4_1_writes_the_timed_reviews_figures_with_save_timing_note(plan: s
 
 
 PATH_CMDLET = re.compile(
-    r"(?<![\w-])(Add-Content|Compress-Archive|Copy-Item|Export-Csv|Get-ChildItem|Get-Content|"
-    r"Get-Item|Import-Csv|Move-Item|Out-File|Push-Location|Remove-Item|Select-String|Set-Content|"
-    r"Set-Location|Split-Path|Test-Path|cd)\b([^|;\n)}]*)"
+    r"(?<![\w-])(Add-Content|Compress-Archive|Convert-Path|Copy-Item|Export-Csv|Get-ChildItem|"
+    r"Get-Content|Get-Item|Import-Csv|Move-Item|Out-File|Push-Location|Remove-Item|Resolve-Path|"
+    r"Select-String|Set-Content|Set-Location|Split-Path|Test-Path|cd)\b([^|;\n)}]*)"
 )
 """A call of a cmdlet that reads or writes a path, with its arguments up to a pipe, a semicolon,
 a closing bracket or the line's end. *Changed 2026-11-02 (the backlog's second item; 007 T085):*
 `Compress-Archive` and `cd`, `Set-Location`'s alias, too, which the plan's steps use; the setup
-block's helpers use neither."""
+block's helpers use neither. *Changed 2026-11-03 (cycle 26; 007 T101):* `Convert-Path` and
+`Resolve-Path` too, by which the update and registration scripts find the checkout; the plan
+uses neither."""
 
 
 def test_every_path_the_setup_blocks_helpers_read_or_write_is_literal(plan: str) -> None:
@@ -4690,3 +4692,203 @@ def test_the_setup_block_finds_a_checkout_whose_path_holds_brackets(
         str(checkout),
         str(checkout / console),
     ]
+
+
+# --- every read of the checkout in the update and registration scripts and the runbook (cycle
+# 19's own finding; cycle 26) --------------------------------------------------------------------
+
+
+SEAT_SCRIPTS = (
+    REPO / "extractor" / "tools" / "update-workstation.ps1",
+    REPO / "extractor" / "tools" / "register-addin.ps1",
+)
+"""The two scripts the runbook and the plan run from the checkout, each of which finds the
+checkout from its own folder."""
+NOT_THE_CHECKOUT = {
+    "$swRedist": "the seat's SOLIDWORKS interops, `api\\redist` under `-SolidWorksRoot`",
+    "$redist": "the same folder, as the registration script names it",
+    "$source": "one interop in it",
+    "$regasm": "the 64-bit regasm, under `%WINDIR%`",
+    "$profile": "the standards profile, in the account's local application data",
+    "$env:LOCALAPPDATA": "the account's local application data, in its profile",
+    "$k": "a registry key",
+    "$Body": "the script block `Invoke-Step` runs, which is no path",
+}
+"""Each name the two scripts and the runbook's PowerShell may still give a path cmdlet, or the
+call operator, without reading it literally, and what it is: none is the checkout or a path in it
+(cycle 26; 007 T101)."""
+ESCAPED = "([Management.Automation.WildcardPattern]::Escape("
+"""A path given escaped, so a `[` or `]` in it names itself: `Set-Alias` and the call operator
+take no `-LiteralPath`, and read the path they are given as a wildcard (007 `research.md` R13
+and R15)."""
+CALL_OPERATOR = re.compile(r"(?<![\w&-])& ([^\n]+)")
+"""A run of a command by the call operator, `&`, with the rest of its line, the command first."""
+CONSOLE = Path(
+    "extractor", "SwReview.Extractor.Console", "bin", "x64", "Release", "net48",
+    "swreview-extract.exe",
+)
+ADD_IN_BUILD = Path("extractor", "SwReview.AddIn", "bin", "x64", "Release", "net48")
+CHECKOUT_FOLDERS = pytest.mark.parametrize(
+    ("folder", "beside"),
+    [("repos", None), ("repos [1]", None), ("repos [1]", "repos 1")],
+    ids=["plain", "brackets", "brackets beside a folder they match"],
+)
+"""The folder of a fictional checkout: plain, one whose name holds brackets, and that one beside a
+folder the brackets match, holding a checkout of its own - the three of the setup block's pin
+above."""
+
+
+def fictional_checkouts(
+    tmp_path: Path, folder: str, beside: str | None, files: dict[Path, str]
+) -> Path:
+    """A fictional checkout, `smart_SW` in `folder`, holding `files` (each path in it with its
+    text, ASCII as the scripts are) and an empty console and add-in build; when `beside` names a
+    folder, another checkout just the same in it. Answers the first."""
+    checkouts = [tmp_path / name / "smart_SW" for name in (folder, beside) if name]
+    for checkout in checkouts:
+        for path, text in {CONSOLE: "", ADD_IN_BUILD / "SwReview.AddIn.dll": "", **files}.items():
+            (checkout / path).parent.mkdir(parents=True, exist_ok=True)
+            (checkout / path).write_text(text, encoding="utf-8")
+    return checkouts[0]
+
+
+def test_every_read_of_the_checkout_in_the_scripts_and_the_runbook_is_literal() -> None:
+    """Cycle 19's own finding (007 T101, cycle 26, 2026-11-03), read on every platform: Windows
+    PowerShell reads a path given by `-Path`, or by position, as a wildcard, and so do the call
+    operator and `Set-Alias`. The update script found the checkout by `Resolve-Path`, went into it
+    by `Push-Location` and ran the registration script by the call operator; the registration
+    script found the add-in's build by `Test-Path` and `Resolve-Path`; and the runbook went into
+    the checkout by `cd '<repo>'` and named its console in `Set-Alias`. Beside a folder their
+    brackets match, each named that folder's checkout. As the plan's pins above, deny by default:
+    every path cmdlet of the two scripts and of the runbook's PowerShell, its blocks and the
+    commands in its text, gives its path by `-LiteralPath` or names only what `NOT_THE_CHECKOUT`
+    lists; the call operator runs a path escaped, or a name that list holds; every `Set-Alias
+    swreview-extract` - the runbook's two and the line the update script prints - takes its path
+    escaped, as the plan's does; and the list holds no name nothing gives."""
+    runbook = RUNBOOK.read_text(encoding="utf-8")
+    texts = [
+        *((script.name, script.read_text(encoding="utf-8")) for script in SEAT_SCRIPTS),
+        *(
+            ("runbook", text)
+            for text in POWERSHELL_BLOCK.findall(runbook)
+            + INLINE_CODE.findall(FENCED.sub("", runbook))
+        ),
+    ]
+    calls = [
+        (name, match[1], match[2].strip())
+        for name, text in texts
+        for match in PATH_CMDLET.finditer(text)
+    ]
+    by_path = [
+        *(
+            (f"{name}: {cmdlet} {arguments}", set(REFERENCE.findall(arguments)))
+            for name, cmdlet, arguments in calls
+            if not arguments.startswith("-LiteralPath ")
+        ),
+        *(
+            (f"{name}: & {command}", {command.split()[0]})
+            for name, text in texts
+            for command in CALL_OPERATOR.findall(text)
+            if not command.startswith(ESCAPED)
+        ),
+    ]
+    aliases = [
+        alias
+        for _, text in texts
+        for alias in re.findall(r"Set-Alias swreview-extract [^\n]*", text)
+    ]
+
+    assert len(calls) >= 35 and len(aliases) == 3
+    assert [call for call, names in by_path if names - NOT_THE_CHECKOUT.keys()] == []
+    assert set().union(*(names for _, names in by_path)) == set(NOT_THE_CHECKOUT)
+    assert [
+        alias for alias in aliases if not alias.startswith(f"Set-Alias swreview-extract {ESCAPED}")
+    ] == []
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+@CHECKOUT_FOLDERS
+def test_the_scripts_find_a_checkout_whose_path_holds_brackets(
+    tmp_path: Path, folder: str, beside: str | None
+) -> None:
+    """Cycle 19's own finding (007 T101, cycle 26, 2026-11-03): the update script found the
+    checkout by `(Resolve-Path (Join-Path $PSScriptRoot "..\\..")).Path`, which answers nothing
+    for a path whose brackets match no folder, so the script stopped at its next line, and answers
+    that folder beside one they match; the registration script found the add-in's build by
+    `Test-Path` and `Resolve-Path` the same way. Read literally, the lines that find the checkout
+    name the checkout itself, whatever its path holds, and an ordinary path as before. They run
+    alone, as they stand in the scripts - the update script's first lines and its health step's
+    console lines, and the registration script's lines that find its build - each from a file of
+    its own in the fictional checkout's `extractor\\tools`, so `$PSScriptRoot` is the script's own,
+    and as the runbook runs the scripts, by their path from the checkout: nothing builds,
+    registers or touches the registry. The alias line the update script prints, pasted, names the
+    checkout's own console."""
+    update, register = (script.read_text(encoding="utf-8") for script in SEAT_SCRIPTS)
+    tools = Path("extractor", "tools")
+    checkout = fictional_checkouts(tmp_path, folder, beside, {
+        tools / "update-workstation.ps1": "".join([
+            update[update.index("[CmdletBinding()]") : update.index("$swRedist = ")],
+            "$repo\n$reviewer\n$solution\n",
+            update[update.index("$extract = ") : update.index('Write-Host "next: ')],
+        ]),
+        tools / "register-addin.ps1": "".join([
+            register[register.index("[CmdletBinding()]") : register.index("# regasm writes")],
+            register[register.index("$addInDirectory = ") : register.index("# Staged for the")],
+            "$addInDirectory\n$addIn\n",
+        ]),
+    })
+    quoted = str(checkout).replace("'", "''")
+
+    lines = run_powershell(
+        f"Set-Location -LiteralPath '{quoted}'\n"
+        ".\\extractor\\tools\\update-workstation.ps1\n.\\extractor\\tools\\register-addin.ps1\n",
+        tmp_path,
+    )
+    [printed] = [line for line in lines if line.startswith("      for this shell: ")]
+    pasted = printed.removeprefix("      for this shell: ")
+
+    assert lines == [
+        str(checkout),
+        str(checkout / "reviewer"),
+        str(checkout / "extractor" / "SwReview.sln"),
+        f"swreview-extract: {checkout / CONSOLE}",
+        printed,
+        str(checkout / ADD_IN_BUILD),
+        str(checkout / ADD_IN_BUILD / "SwReview.AddIn.dll"),
+    ]
+    assert run_powershell(
+        f"{pasted}\n(Get-Alias swreview-extract).ResolvedCommand.Path\n", tmp_path
+    ) == [str(checkout / CONSOLE)]
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+@CHECKOUT_FOLDERS
+def test_the_runbook_finds_a_checkout_whose_path_holds_brackets(
+    tmp_path: Path, folder: str, beside: str | None
+) -> None:
+    """Cycle 19's own finding (007 T101, cycle 26, 2026-11-03): the runbook's quick reference went
+    into the checkout by `cd '<repo>'` and named its console by `Set-Alias swreview-extract
+    '<repo>\\...'`, each read as a wildcard, so beside a folder the checkout's brackets match the
+    window went into that folder and the alias ran its console. Read literally - `cd
+    -LiteralPath`, and the alias's path escaped, as the plan's setup block reads them (the pin
+    above it) - they name the checkout itself; the pin above holds the runbook's other `cd`s to
+    the same."""
+    [quick] = POWERSHELL_BLOCK.findall(
+        section(RUNBOOK.read_text(encoding="utf-8"), "9. Quick reference")
+    )
+    lines = quick.splitlines()
+    [cd] = [line.split(";")[0] for line in lines if line.startswith("cd ") and "<repo>" in line]
+    [alias] = [line for line in lines if line.startswith("Set-Alias swreview-extract ")]
+    checkout = fictional_checkouts(tmp_path, folder, beside, {})
+    quoted = str(checkout).replace("'", "''")
+
+    assert run_powershell(
+        "\n".join([
+            cd.replace("<repo>", quoted),
+            "(Get-Location).Path",
+            alias.replace("<repo>", quoted),
+            "(Get-Alias swreview-extract).ResolvedCommand.Path",
+            "",
+        ]),
+        tmp_path,
+    ) == [str(checkout), str(checkout / CONSOLE)]
