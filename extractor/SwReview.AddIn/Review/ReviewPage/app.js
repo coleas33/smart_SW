@@ -445,6 +445,11 @@
           if (parsed && typeof parsed.request_id === 'string') {
             refusal.requestId = parsed.request_id;
           }
+          // A refused decision names the finding's disposition as the record holds it, or null (002
+          // cycle 23), so the card is drawn from the backend's record, not from this page's.
+          if (parsed && typeof parsed.disposition === 'object') {
+            refusal.recorded = parsed.disposition;
+          }
           throw refusal;
         }
 
@@ -1122,9 +1127,11 @@
    *
    * It also keeps what is recorded in the finding's body, the page's one memory of it, which
    * `placeFinding` holds from the finding as sent and `decide` shows again after a refusal
-   * (roadmap hole H-g-012) - only through the card that entry holds (`entryOf`).
+   * (roadmap hole H-g-012) - only through the card that entry holds (`entryOf`). A refusal that
+   * names the record comes through here too, with `asTyped`, which leaves the note box as typed,
+   * since the backend never read its note (002 cycle 23).
    */
-  function showDisposition(card, disposition) {
+  function showDisposition(card, disposition, asTyped) {
     var entry = entryOf(card);
     if (entry) {
       entry.body.disposition = disposition;
@@ -1141,7 +1148,9 @@
     status.className = render.dispositionClass(text);
     status.textContent = text;
     render.pressTriage(card, disposition ? disposition.triage : null);
-    render.showNote(card, disposition);
+    if (!asTyped) {
+      render.showNote(card, disposition);
+    }
     // The head says it has no triage until the record holds one (roadmap hole H-c-008); a card the
     // review no longer holds has no record here to read.
     if (entry) {
@@ -2799,7 +2808,12 @@
       // Refused, so the record is as it was (roadmap hole H-g-012): the card shows it again - its
       // triage pressed, or none, in place of the pick, and its sentence above the refusal. Which
       // press is refused is the backend's rule; the page compares nothing. The note box keeps what
-      // was typed: the backend never read it, so the retry sends it (cycle 11's Tier 2 review).
+      // was typed: the backend never read it, so the retry sends it (cycle 11's Tier 2 review). A
+      // refusal of the record names it as it stands, which a decision another client recorded may
+      // have changed since this page drew the card, so that is the record shown (002 cycle 23).
+      if (error.recorded !== undefined) {
+        showDisposition(card, error.recorded, true);
+      }
       var entry = entryOf(card);
       var recorded = entry ? entry.body.disposition : null;
       render.pressTriage(card, recorded ? recorded.triage : null);
