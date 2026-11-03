@@ -1253,7 +1253,7 @@ against 81 / 10 / 0 at T091, before each recount.
   included, none broken. Every changed file LF in the index.
 - No SOLIDWORKS process, seat task, or paid or live test ran.
 - *Changed 2026-11-03:* that tree came before the Tier 2 review's fixes; their checks are in the
-  next paragraph, and the whole suites run on the final tree after them.
+  next paragraph, and the whole suites ran on the stacked tree after them (below).
 - *Done 2026-11-03, cycle 18 stacked on cycle 17:* the gates above, and the checks of the Tier 2
   review and of its read-only check below, ran on cycle 18 before it was stacked on cycle 17 (002
   Phase 35, T387 to T392). The two met in the words file, the tests that name its groups,
@@ -1261,8 +1261,12 @@ against 81 / 10 / 0 at T091, before each recount.
   first: `first_shown` stays right after `note`, and `timing` and `timing_form` follow it. 007 stays
   86 / 5 / 0. On the stacked tree the pane fixtures' three generators wrote every fixture
   byte-identical, and the goldens did not move. T091's sub-item of the stacking in
-  [tasks.md](tasks.md) names each meeting. The whole suites on the stacked tree are recorded next,
-  as T091's last sub-item.
+  [tasks.md](tasks.md) names each meeting. The whole suites on the stacked tree ran, and T091's
+  last sub-item records them.
+- *Done 2026-11-03:* the whole suites on the stacked tree (`d710d876`): 18,993 passed and 5
+  skipped on Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed;
+  C# with zero warnings, then 10,274 extractor and 4,378 add-in tests passed (T091's last
+  sub-item).
 
 **The Tier 2 review** (T091; 2026-11-03; decision 180A: one Opus review). No must-fix; five
 should-fix, each fixed test first, two things they left in
