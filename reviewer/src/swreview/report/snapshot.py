@@ -186,10 +186,10 @@ def carried_withdrawals(
 ) -> list[dict[str, Any]]:
     """The earlier record's withdrawals with a decision that a re-run's (Check again, feature 015)
     `session.started` names (`CARRIED_WITHDRAWALS`), as they went; none for any other session.
-    `report.md` names them before the session's own (`withdrawn_lines`), each marked as the
-    earlier check run's: their ids are that record's, which the re-run may have given another
-    finding, so `withdrawn_lines`' held-id skip is not theirs (015 cycle 12 and its Tier 1
-    review)."""
+    `report.md` names them before the session's own (`withdrawn_lines`), each marked with the
+    session that withdrew it (`session_id`): their ids are that session's, which the re-run may
+    have given another finding, so `withdrawn_lines`' held-id skip is not theirs (015 cycle 12,
+    its Tier 1 and Codex reviews)."""
     read = _own_events(session, events)
     return [dict(body) for body in read[0].body.get(CARRIED_WITHDRAWALS, [])] if read else []
 

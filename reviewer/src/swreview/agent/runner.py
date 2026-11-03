@@ -2636,11 +2636,19 @@ def start_review(
         # for that reason, and a run with every lever off is unchanged by the move, because
         # setup wrote nothing between the two places. A re-run's also names the earlier record's
         # withdrawals with a decision, whose findings no event of this session can name (015
-        # cycle 12): those it carried itself first, so a chain of Check agains keeps them.
+        # cycle 12): those it carried itself first, so a chain of Check agains keeps them. Each
+        # names the session that withdrew it, since finding ids restart in each session: the
+        # earlier record's own its id, a carried one the id it kept (cycle 12's Codex review).
         carried: list[dict[str, Any]] = []
         if earlier is not None:
             stream = list(session_events(out, earlier.session_id))
-            carried = [*carried_withdrawals(earlier, stream), *withdrawn_lines(earlier, stream)]
+            carried = [
+                *carried_withdrawals(earlier, stream),
+                *(
+                    {**body, "session_id": str(earlier.session_id)}
+                    for body in withdrawn_lines(earlier, stream)
+                ),
+            ]
         sink.emit(
             "session.started",
             {
