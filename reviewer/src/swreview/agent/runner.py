@@ -142,7 +142,7 @@ from swreview.report.explanations import (
     keep_explained,
 )
 from swreview.report.markdown import render_report
-from swreview.report.names import plural
+from swreview.report.names import component_files, component_names, plural
 from swreview.report.session import (
     CLOSEOUT_CHECK,
     HUMAN_TIMING_FIELDS,
@@ -181,6 +181,7 @@ from swreview.report.summary import (
     load_words,
     with_triage_tally,
 )
+from swreview.report.titles import withdrawal_title
 from swreview.tools.checks_mechanical import (
     attach_part_roles,
     check_hygiene,
@@ -1593,23 +1594,24 @@ class ReviewRun:
     ) -> None:
         """Say what folds did, so the stream agrees with them (002 FR-031): for each fold, the id
         its finding was first announced under is withdrawn, naming the id it took
-        (`FOLDED_INTO`) and the title of the `finding` body that announces it under that id next,
-        which is the title it was first announced with (cycle 16); then one
+        (`FOLDED_INTO`) and its title (`withdrawal_title`): the display title it was first
+        announced with, which the `finding` body announcing it under that id next names, and its
+        parts' names after it when it names none of them (cycle 16); then one
         `disposition.cleared` per decision the folds cleared - each finding as decided, from
         `_cleared` - after the last `finding` event of its id, so the line lands on the card the
         fold drew, worded for its `cause`."""
+        names, files = component_names(self.context.ir), component_files(self.context.ir)
         for spent, finding in folds:
-            announced = self.context.finding_body(finding)
             self.sink.emit(
                 "finding.withdrawn",
                 {
                     "finding_id": spent,
-                    "title": announced["title"],
+                    "title": withdrawal_title(finding, names, files),
                     "reason": FOLDED_WITHDRAWAL.format(id=finding.id),
                     FOLDED_INTO: finding.id,
                 },
             )
-            self.sink.emit("finding", announced)
+            self.sink.emit("finding", self.context.finding_body(finding))
         for decided in cleared:
             self.sink.emit(
                 "disposition.cleared",

@@ -48,7 +48,7 @@ from swreview.ir.models import (
     Fastener,
     Hole,
 )
-from swreview.report.names import component_names
+from swreview.report.names import component_files, component_names
 from swreview.report.session import (
     Contact,
     ContactIdAllocator,
@@ -60,7 +60,7 @@ from swreview.report.session import (
     Timing,
 )
 from swreview.report.summary import decision_words, load_words, triage_tally
-from swreview.report.titles import display_title, pane_finding
+from swreview.report.titles import pane_finding, withdrawal_title
 
 if TYPE_CHECKING:
     from swreview.engineering_context.models import ContextArtifact
@@ -343,7 +343,8 @@ class ToolContext:
         exactly what the session dropped. An id the session does not hold is ignored. Returns
         the ids withdrawn, in session order.
 
-        `title` is the finding's display title, as its `finding` event named it, so a line printed
+        `title` is the finding's display title, as its `finding` event named it, and its parts'
+        names after it when it names none of them (`withdrawal_title`), so that a line printed
         from the body alone - `report.md`'s, a read-only restore's - says which finding went (002
         FR-031, cycle 16). A finding that held a decision takes it with it, and its body says so
         (002 FR-031, roadmap hole H-g-010): `disposition`, the one it held, and `taken`, the words
@@ -356,11 +357,11 @@ class ToolContext:
         if not gone:
             return []
         session.findings[:] = [finding for finding in session.findings if finding.id not in wanted]
-        names = component_names(self.ir)
+        names, files = component_names(self.ir), component_files(self.ir)
         for finding in gone:
             body: dict[str, Any] = {
                 "finding_id": finding.id,
-                "title": display_title(finding, names),
+                "title": withdrawal_title(finding, names, files),
                 "reason": reason,
             }
             if finding.disposition is not None:
