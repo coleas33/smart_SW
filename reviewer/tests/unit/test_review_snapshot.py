@@ -18,6 +18,7 @@ for all three:
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -293,16 +294,25 @@ def test_a_waiting_record_restores_with_the_composed_line_and_the_restored_block
 def test_a_sent_or_unmarked_record_restores_with_todays_sentence_and_no_block(
     session: ReviewSession, package: EvidencePackage, state: str | None
 ) -> None:
+    """*Changed 2026-11-03 on purpose (002 T398; cycle 22, roadmap hole H-c-011):* the fixture's
+    flagged findings record no outcome, so 009's sentence is now followed by the console's, which
+    records the rest (`read_only_console`), where it ended the line; the cases that tell the two
+    lines apart are cycle 22's below."""
+    words = load_words()
     record = session if state is None else with_status(session, state)
 
     restored = restored_snapshot(record, package, run_id=RUN_ID)
 
     assert restored == review_snapshot(
-        record, package, run_id=RUN_ID, read_only_reason=load_words().read_only
+        record,
+        package,
+        run_id=RUN_ID,
+        read_only_reason=f"{words.read_only} {words.read_only_console}",
     )
     assert restored["read_only_reason"] == (
         "The backend restarted, so this review is shown from its run folder. "
-        "Follow-ups, decisions and answers are off."
+        "Follow-ups, decisions and answers are off. "
+        "Record the rest of the triage at the console: swreview disposition."
     )
     assert "send" not in restored["ranking"]["summary"]
 
@@ -516,3 +526,97 @@ def test_a_read_only_snapshot_names_each_withdrawal_that_took_a_decision(
     assert waiting["withdrawn"] == restored["withdrawn"]
     assert "withdrawn" not in live
     assert as_bytes(none_taken) == as_bytes(restored_snapshot(session, package, run_id=RUN_ID))
+
+
+# --- 002 cycle 22 (roadmap hole H-c-011): a finished record's line names the console ----------
+
+JUDGED_AT = datetime(2026, 11, 3, 9, 0, tzinfo=UTC)
+"""When the fictional outcomes below were recorded."""
+
+
+def judged(triage: str | None, decision: str = "accepted") -> dict[str, Any]:
+    """A finding's update: `decision` recorded, with `triage` as its outcome, or none."""
+    return {
+        "disposition": Disposition(
+            decision=decision, note="FICT judged", by="FICT-ENG", at=JUDGED_AT, triage=triage
+        )
+    }
+
+
+PASS = {"status": "checked_within_scope", "severity": "info"}
+"""A finding's update into a pass, 'Checked, no issue', which takes no outcome but the miss."""
+
+
+def each(update: Callable[[int], dict[str, Any]]) -> Callable[[ReviewSession], ReviewSession]:
+    """The record with each finding updated by `update` of its index."""
+
+    def changed(session: ReviewSession) -> ReviewSession:
+        findings = [
+            finding.model_copy(update=update(index))
+            for index, finding in enumerate(session.findings)
+        ]
+        return session.model_copy(update={"findings": findings})
+
+    return changed
+
+
+CONSOLE_CASES: dict[str, tuple[Callable[[ReviewSession], ReviewSession], bool]] = {
+    "no outcome recorded": (each(lambda index: {}), True),
+    "an accept recorded with none": (
+        each(lambda index: judged(None) if index == 0 else judged("new_and_real")),
+        True,
+    ),
+    "a defer recorded with none": (
+        each(lambda index: judged(None, "deferred") if index == 1 else judged("wrong")),
+        True,
+    ),
+    "every outcome recorded": (each(lambda index: judged("already_known")), False),
+    "a pass with none beside them": (
+        each(lambda index: PASS if index == 0 else judged("not_worth_flagging")),
+        False,
+    ),
+    "only passes, none judged": (each(lambda index: PASS), False),
+    "no finding": (lambda session: session.model_copy(update={"findings": []}), False),
+}
+"""Each record the fixture's eight flagged findings make, and whether its line names the console."""
+
+
+@pytest.mark.parametrize(
+    ("record_of", "named"), list(CONSOLE_CASES.values()), ids=list(CONSOLE_CASES)
+)
+def test_a_finished_records_line_names_the_console_while_a_flagged_finding_records_no_outcome(
+    session: ReviewSession,
+    package: EvidencePackage,
+    record_of: Callable[[ReviewSession], ReviewSession],
+    named: bool,
+) -> None:
+    """002 FR-031, cycle 22 (roadmap hole H-c-011): a record restored from its run folder takes no
+    decision in the pane (009 FR-021), so while a flagged finding - every status but a pass, which
+    takes no outcome but the miss (187A) - records no outcome, decided or not, its line ends with
+    the console's sentence (`read_only_console`), after 009's and a space; once every flagged
+    finding records one, or none is flagged, the line is 009's alone. The rest of the snapshot is
+    the one `review_snapshot` gives that line."""
+    words = load_words()
+    record = record_of(session)
+
+    restored = restored_snapshot(record, package, run_id=RUN_ID)
+
+    reason = f"{words.read_only} {words.read_only_console}" if named else words.read_only
+    assert restored["read_only_reason"] == reason
+    assert restored == review_snapshot(record, package, run_id=RUN_ID, read_only_reason=reason)
+
+
+@pytest.mark.parametrize("state", ["not_sent", "send_failed"])
+def test_a_waiting_records_line_never_names_the_console(
+    session: ReviewSession, package: EvidencePackage, state: str
+) -> None:
+    """002 cycle 22: a record that waits for Send is read-only too, but its Send leads back to a
+    live review that takes decisions, so its line stays 015's (68A, 73A), though the fixture's
+    flagged findings record no outcome."""
+    failures = [SendFailure(at=CHECKED, error_class="FICTError", reason="FICT refused")]
+    record = with_status(session, state, failures=failures if state == "send_failed" else [])
+
+    restored = restored_snapshot(record, package, run_id=RUN_ID)
+
+    assert load_words().read_only_console not in restored["read_only_reason"]
+    assert restored["read_only_reason"].startswith(load_words().read_only_lead + " ")
