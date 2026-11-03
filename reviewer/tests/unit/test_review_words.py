@@ -94,6 +94,9 @@ PLACEHOLDERS: dict[str, set[str]] = {
     # *Added 2026-11-02 on purpose (015 T123; cycle 12's Codex review):* the mark on an earlier
     # record's withdrawal in a re-run's `report.md` names the session that withdrew it.
     "withdrawn.earlier": {"session_id"},
+    # *Added 2026-11-03 on purpose (002 T388; cycle 17, roadmap hole H-a-009):* the line a card
+    # and `report.md` print for a finding an earlier review first showed, naming that review's date.
+    "labels.first_shown.earlier": {"date"},
     "resume.without": set(),
     "finding_group_text.one": set(),
     "finding_group_text.many": {"n"},
@@ -174,6 +177,8 @@ def test_the_words_are_loaded_once() -> None:
         ("triage_tally",),
         # *Added 2026-11-02 on purpose (002 T358; roadmap hole H-g-010).*
         ("withdrawn",),
+        # *Added 2026-11-03 on purpose (002 T388; cycle 17, roadmap hole H-a-009).*
+        ("labels", "first_shown"),
     ],
 )
 def test_an_extra_key_anywhere_is_refused(path: tuple[object, ...]) -> None:
@@ -366,7 +371,10 @@ def test_every_label_is_a_plain_word_not_a_token() -> None:
     finding's card head says until its triage is recorded.
 
     *Changed 2026-11-02 on purpose (002 T368; cycle 11's Tier 2 review):* and the sentence a card
-    says when a late triage keeps the note recorded first."""
+    says when a late triage keeps the note recorded first.
+
+    *Changed 2026-11-03 on purpose (002 T388; cycle 17):* and the line a card says when an earlier
+    review first showed its finding."""
     labels = load_words().labels
     for group in (
         labels.status,
@@ -377,6 +385,7 @@ def test_every_label_is_a_plain_word_not_a_token() -> None:
         labels.pass_triage,
         labels.no_triage,
         labels.note,
+        labels.first_shown,
     ):
         assert all("_" not in word for word in group.values())
 
@@ -500,6 +509,23 @@ def test_a_note_a_late_triage_did_not_keep_is_said_once() -> None:
 
     assert labels.note == {"not_kept": "The note recorded first stays."}
     assert order.index("note") == order.index("no_triage") + 1
+
+
+def test_a_finding_an_earlier_review_first_showed_names_that_reviews_date() -> None:
+    """Cycle 17 (002 FR-031; roadmap hole H-a-009, for owner decision 188A's date): one line, keyed
+    `earlier`, whose `{date}` is the date of the earliest earlier review of the same document that
+    raised the finding, `YYYY-MM-DD`; the card prints it under the title, the date as text, and
+    `report.md` under the finding's heading. With no labels the card says nothing (009 FR-030). A
+    group of its own after `note`, so `source` stays just before `errors`
+    (`test_sources_labels.py`)."""
+    labels = load_words().labels
+    order = list(raw_words()["labels"])
+
+    assert labels.first_shown == {"earlier": "First shown in the review of {date}."}
+    assert labels.first_shown["earlier"].format(date="2026-09-18") == (
+        "First shown in the review of 2026-09-18."
+    )
+    assert order.index("first_shown") == order.index("note") + 1
 
 
 def test_a_triage_a_finding_does_not_take_says_what_a_pass_takes() -> None:

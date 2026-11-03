@@ -267,6 +267,29 @@ def test_a_finding_body_may_carry_the_triage_tally_beside_the_finding() -> None:
             findings.validate([refused])
 
 
+def test_a_finding_body_may_name_when_an_earlier_review_first_showed_it() -> None:
+    """002 T388 (cycle 17; FR-031; roadmap hole H-a-009): a `finding` body may name `first_shown`,
+    the date, `YYYY-MM-DD`, of the earliest earlier review of the same document whose record held
+    a flagged finding with its subject key, and only when there is one, so a body without it is
+    valid as before. A date of another shape, a blank, null and a number are refused, and a
+    session's finding, closed where the session lists it, takes none."""
+    plain = {**_finding_body(), "triage_tally": None}
+    body = {**plain, "first_shown": "2026-09-18"}
+    event = {"seq": 1, "at": "2026-11-03T12:00:00Z", "type": "finding", "body": body}
+    validator = contract_validator(EVENTS_CONTRACT)
+
+    validator.validate(event)
+    validator.validate({**event, "body": plain})
+    for spoiled in ("18/09/2026", "2026-09-18T09:00:00", "2026-9-18", "", None, 20260918):
+        with pytest.raises(SchemaValidationError):
+            validator.validate({**event, "body": {**body, "first_shown": spoiled}})
+    findings = contract_validator("review-session.schema.json").evolve(
+        schema={"$ref": f"{SESSION_SCHEMA}#/properties/findings"}
+    )
+    with pytest.raises(SchemaValidationError):
+        findings.validate([{**_finding_body(), "first_shown": "2026-09-18"}])
+
+
 # --- every emitted event validates -------------------------------------------------------
 
 
