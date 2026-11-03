@@ -55,6 +55,7 @@ from swreview.prerun import (
 )
 from swreview.report.attention import rank
 from swreview.report.attention_record import StaleAttentionRecord, read_attention_record
+from swreview.report.dispositions import set_disposition
 from swreview.report.markdown import render_report
 from swreview.report.names import plural
 from swreview.report.session import (
@@ -2036,12 +2037,13 @@ EARLIER_ID = UUID(int=12)
 
 
 def earlier_stream(
-    run: runner.ReviewRun, earlier: ReviewSession, *written: tuple[str, dict[str, Any]]
+    folder: Path, earlier: ReviewSession, *written: tuple[str, dict[str, Any]]
 ) -> None:
-    """`earlier` given a session of its own, and its stream as a re-run's rotation leaves it,
-    `events.1.jsonl` beside the run's: its `session.started`, then `written`."""
+    """`earlier` given a session of its own, and its stream as a re-run's rotation leaves it in
+    `folder`, `events.1.jsonl`, written afresh: its `session.started`, then `written`."""
     earlier.session_id = EARLIER_ID
-    sink = EventSink(run.out_dir / "events.1.jsonl")
+    (folder / "events.1.jsonl").unlink(missing_ok=True)
+    sink = EventSink(folder / "events.1.jsonl")
     sink.emit("session.started", {"session_id": str(EARLIER_ID)})
     for kind, body in written:
         sink.emit(kind, body)
@@ -2081,7 +2083,7 @@ def test_the_carry_keeps_an_undecided_findings_cleared_line_on_the_finding_it_la
     rejected = earlier.findings[1].disposition
     assert accepted is not None and rejected is not None
     earlier_stream(
-        run,
+        run.out_dir,
         earlier,
         cleared_on("F-007", accepted, "FICT the first line on F-007", known=1),
         cleared_on("F-007", accepted, chat.RESTATED_LINE, not_recorded=2),
@@ -2130,7 +2132,7 @@ def test_a_line_whose_finding_is_decided_since_or_not_raised_once_is_not_carried
     rejected = earlier.findings[2].disposition
     assert accepted is not None and rejected is not None
     earlier_stream(
-        run,
+        run.out_dir,
         earlier,
         *(
             cleared_on(finding_id, accepted, chat.RESTATED_LINE)
@@ -2164,7 +2166,7 @@ def test_the_carrys_own_line_follows_a_carried_one_and_is_shown(bare: Any) -> No
     restated = decided_with(medium, "rejected", "wrong").disposition
     left = earlier.findings[1].disposition
     assert restated is not None and left is not None
-    earlier_stream(run, earlier, cleared_on("F-007", restated, chat.RESTATED_LINE))
+    earlier_stream(run.out_dir, earlier, cleared_on("F-007", restated, chat.RESTATED_LINE))
 
     run.carry_from(earlier)
 
@@ -2181,6 +2183,57 @@ def test_the_carrys_own_line_follows_a_carried_one_and_is_shown(bare: Any) -> No
     said = [(kind, body) for kind, body in events if kind.startswith("disposition")]
     assert said == [("disposition.cleared", carried), ("disposition.cleared", own)]
     assert cleared_lines(run.session, replay_events(run.out_dir / "events.jsonl")) == [own]
+
+
+def test_a_re_run_names_the_earlier_withdrawals_first_under_an_id_it_numbers_again(
+    tmp_path: Path,
+) -> None:
+    """015 T122 (FR-029), on the runner, found by a mutant that survived T121: the earlier record
+    lost its first finding to an answer with the Reject recorded on it, and its stream also holds a
+    fold's withdrawal and an undecided finding's, which name nothing. The re-run numbers afresh and
+    raises that finding again under the same id, undecided. Its `session.started` names the
+    earlier withdrawal alone, and it is named first under "Withdrawn with a decision" all the same,
+    before a withdrawal of the re-run's own - the rule that passes over a finding the session
+    still holds is for the session's own withdrawals, whose stream can run ahead of its record."""
+    folder = package_folder(tmp_path, live_prerun_package())
+    earlier = waited(checks_only(folder, None))
+    set_aside(folder)
+    gone = earlier.findings.pop(0)
+    rejected = Disposition(
+        decision="rejected", note="FICT not here", by="FICT engineer", at=FIRST_DECIDED,
+        triage="wrong",
+    )
+    took = {
+        "finding_id": gone.id,
+        "reason": "bought part (your answer to ER-001)",
+        "disposition": rejected.model_dump(mode="json"),
+        "taken": "your Reject (wrong) went with it",
+    }
+    earlier_stream(
+        folder,
+        earlier,
+        ("finding.withdrawn", took),
+        ("finding.withdrawn", {"finding_id": "F-098", "reason": "FICT", "folded_into": gone.id}),
+        ("finding.withdrawn", {"finding_id": "F-099", "reason": "FICT an undecided finding"}),
+    )
+    rerun = checks_only(folder, None, earlier=earlier)
+    try:
+        own = rerun.session.findings[-1].id
+        set_disposition(rerun.session, own, "accepted", "FICT as modelled", "FICT engineer")
+        rerun.context.withdraw_findings([own], "FICT a later answer")
+        stream = list(replay_events(folder / "events.jsonl"))
+
+        assert gone.id in {finding.id for finding in rerun.session.findings}
+        assert stream[0].body["carried_withdrawals"] == [took]
+        report = render_report(rerun.session, events=stream).splitlines()
+        start = report.index("## Withdrawn with a decision") + 2
+        assert report[start : report.index("", start)] == [
+            f"- {gone.id} withdrawn: bought part (your answer to ER-001); "
+            "your Reject (wrong) went with it",
+            f"- {own} withdrawn: FICT a later answer; your Accept went with it",
+        ]
+    finally:
+        rerun.close()
 
 
 def finding_on(folder: Path, earlier: Finding) -> str:

@@ -320,6 +320,17 @@ model's opening, and the id maps a page would need to re-key its own work are no
 7. **the profile.** When the profile in effect differs from `earlier.model_status.profile` (another
    path, or the same path with other bytes, or one of the two absent), the change is named (section
    5); decisions whose findings the new profile no longer raises are named by step 2's rule.
+8. **what the earlier record said of decisions already gone.** *Added 2026-11-02 (cycle 12, T122;
+   owner decision 193A, extended to Check again; FR-029):* the earlier record's own stream
+   (`agent/events.session_events`) is read twice. Before step 2's decisions, each undecided earlier
+   finding's last `disposition.cleared` (`snapshot.cleared_lines`) is written again onto the one
+   re-run finding with its subject key, its disposition and words as they were and its
+   `triage_tally` the review's, so a decision carried onto that finding ends it and a line step 2
+   writes there comes after it; a line with no such finding goes nowhere and is not named, since it
+   holds no decision. And the re-run's `session.started`, written by `start_review`, names the
+   earlier record's withdrawals with a decision (`snapshot.withdrawn_lines`, those it carried
+   itself first) as `carried_withdrawals`, which `report.md` names before the re-run's own. Every
+   reader reads both from the re-run's own stream, and with neither nothing is written.
 
 Nothing is carried by its number alone (FR-029). The carry ends with `_settle_waiting(applied)`,
 the step the waiting apply ends with too (owner decision 71A; `review-flow.md` section 4): the

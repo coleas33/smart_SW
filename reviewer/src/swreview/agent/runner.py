@@ -164,7 +164,12 @@ from swreview.report.session import (
     load_session,
     save_session,
 )
-from swreview.report.snapshot import root_document
+from swreview.report.snapshot import (
+    CARRIED_WITHDRAWALS,
+    cleared_lines,
+    root_document,
+    withdrawn_lines,
+)
 from swreview.report.sources import answer_basis
 from swreview.report.summary import (
     DECISION_NOUNS,
@@ -1656,7 +1661,8 @@ class ReviewRun:
         answered code question onto the one question that `asks_same` (applied by code through
         `_apply_answers` with no drawing read), each decision onto the one finding with the same
         `finding_subject_key` (through `set_disposition` at its first time, announced as a live
-        decision is), the drawing outcome lines verbatim, every human timing input
+        decision is) and each undecided finding's cleared line onto it (`_carry_decisions`),
+        the drawing outcome lines verbatim, every human timing input
         (`HUMAN_TIMING_FIELDS`, owner decision 183A) and the model status. What cannot be
         carried is named once in one `coverage.recheck` row.
         Nothing is written: no `save_session`, no report; `_open_waiting`'s finalization is the
@@ -1757,11 +1763,25 @@ class ReviewRun:
         finding's status and severity are the ones decided (owner decision 194A); its triage with
         it only when the finding takes it, a pass `wrong` alone (owner decision 187A), and any
         other named. Onto a finding with another status or severity nothing is carried, and its
-        card says so (`disposition.cleared`), so `coverage.recheck` does not name it."""
+        card says so (`disposition.cleared`), so `coverage.recheck` does not name it.
+
+        First, each undecided earlier finding's cleared line, from the earlier record's own stream,
+        goes onto the one finding with its subject key, its tally the review's (owner decision 193A,
+        extended to Check again; 015 cycle 12): before any decision, so a decision carried onto that
+        finding ends the line, and a line the carry writes there itself is the one shown. A line
+        with no one finding to land on holds no decision, so it is not named."""
         session = self.session
         by_key: dict[Any, list[Finding]] = {}
         for finding in session.findings:
             by_key.setdefault(finding_subject_key(finding), []).append(finding)
+        said = {finding.id: finding for finding in earlier.findings}
+        for line in cleared_lines(earlier, session_events(self.out_dir, earlier.session_id)):
+            matches = by_key.get(finding_subject_key(said[line["finding_id"]]), [])
+            if len(matches) == 1:
+                self.sink.emit(
+                    "disposition.cleared",
+                    with_triage_tally({**line, "finding_id": matches[0].id}, session.findings),
+                )
         decided = [finding for finding in earlier.findings if finding.disposition is not None]
         target: dict[str, str] = {}
         for finding in decided:
@@ -2499,7 +2519,8 @@ def start_review(
             `no_redaction` is the default because a run may legitimately have no key.
         earlier: A re-run's earlier not-sent record (feature 015, `contracts/recheck.md`
             section 3): its live outcome is carried as one step and its drawing-read
-            capability onto the context, so the host is asked nothing either answered.
+            capability onto the context, so the host is asked nothing either answered, and
+            its withdrawals with a decision are named on `session.started` (section 4).
             Only with `send_when_checked` false.
     """
     if earlier is not None and send_when_checked:
@@ -2583,7 +2604,14 @@ def start_review(
         # opens a session on it and `benchmark/scorecard.py::seconds_to_first_finding`
         # counts no finding before it. It is emitted here rather than in `ReviewRun.start()`
         # for that reason, and a run with every lever off is unchanged by the move, because
-        # setup wrote nothing between the two places.
+        # setup wrote nothing between the two places. A re-run's also names the earlier record's
+        # withdrawals with a decision, whose findings no event of this session can name (015
+        # cycle 12).
+        carried = (
+            withdrawn_lines(earlier, session_events(out, earlier.session_id))
+            if earlier is not None
+            else []
+        )
         sink.emit(
             "session.started",
             {
@@ -2593,6 +2621,7 @@ def start_review(
                 "model": chosen_model,
                 "effort_mapping": effort_mapping.model_dump(mode="json"),
                 **({"send_when_checked": False} if not send_when_checked else {}),
+                **({CARRIED_WITHDRAWALS: carried} if carried else {}),
             },
         )
         record_partial_evidence(session, loaded.package)

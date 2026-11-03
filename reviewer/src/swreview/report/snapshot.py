@@ -41,6 +41,7 @@ if TYPE_CHECKING:  # pragma: no cover - imported for annotations only
     from swreview.report.summary import SendInput
 
 __all__ = [
+    "CARRIED_WITHDRAWALS",
     "WAITING_STATES",
     "cleared_lines",
     "restored_snapshot",
@@ -54,6 +55,10 @@ WAITING_STATES = frozenset({"not_sent", "send_failed"})
 
 WHEN_FORMAT = "%Y-%m-%d %H:%M"
 """`{when}` of `send.restored_line`: the stored wall clock, never converted (015 records.md 1)."""
+
+CARRIED_WITHDRAWALS = "carried_withdrawals"
+"""The `session.started` key under which a re-run (Check again, feature 015) names its earlier
+record's withdrawals with a decision, as `withdrawn_lines` read them there (015 cycle 12)."""
 
 
 def review_snapshot(
@@ -164,14 +169,24 @@ def withdrawn_lines(session: ReviewSession, events: Iterable[AgentEvent]) -> lis
     since `answer_evidence_batch` then reloads the record from disk and `_play` renders from it.
     A body whose finding the session still holds is skipped, so the report names no withdrawal
     its record has not caught up with (cycle 10's Tier 2 review, and a read-only check of its
-    fixes)."""
+    fixes).
+
+    A re-run (Check again, feature 015) writes a stream of its own, so its `session.started` names
+    its earlier record's withdrawals with a decision (`CARRIED_WITHDRAWALS`), and they come first,
+    as they went. Their ids are the earlier record's, which the re-run may have given another
+    finding, so the held-id skip is not theirs (015 cycle 12)."""
+    read = _own_events(session, events)
     held = {finding.id for finding in session.findings}
+    carried = read[0].body.get(CARRIED_WITHDRAWALS, []) if read else []
     return [
-        dict(event.body)
-        for event in _own_events(session, events)
-        if event.type == "finding.withdrawn"
-        and "taken" in event.body
-        and event.body.get("finding_id") not in held
+        *(dict(body) for body in carried),
+        *(
+            dict(event.body)
+            for event in read
+            if event.type == "finding.withdrawn"
+            and "taken" in event.body
+            and event.body.get("finding_id") not in held
+        ),
     ]
 
 
