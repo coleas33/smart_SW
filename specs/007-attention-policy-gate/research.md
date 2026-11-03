@@ -913,3 +913,206 @@ pin was red against 72 / 5 / 0 at T078 and against 73 / 8 / 0 at T081 before eac
 - No C# or page file changed, so no C# gate. Not run in this lane: the whole non-live suites,
   which run before the pull request and in its CI. No SOLIDWORKS process, seat task, or paid or
   live test ran.
+
+## R11. The timing note's seat command (cycle 14, 2026-11-02)
+
+**What**: one function in the seat plan's setup block, `Save-TimingNote '<run folder>'
+'<letter>'`, appends a timed review's figures to `notes\timing.txt` in one block headed by the
+run folder's date and letter (`20261101-A`). The owner picked it on 2026-11-02 (roadmap update
+run 4's round, 29; cycle 14, review Tier 3). It carries no decision of its own: it serves 186A,
+192A, 195A, 196A and 197A.
+
+**Why**: at a timed review the engineer copied into the note by hand the run folder's full
+stamp, the start and end times, and every duration the plan's commands print for that review:
+`Show-ReviewFacts`' drawing-phase milliseconds and its seconds to the first `text.delta`, the
+usage line's round times and `Show-SetupTime`'s time. Each copy is a chance to get a figure wrong,
+or to carry one off the console into the findings document.
+
+**What stays where**: the block goes in `notes\timing.txt`, beside the six minutes and the
+update's minutes, which the engineer still types; the findings document keeps the net saved and
+the folder's date and letter, as before; the run folder is only read; the console shows the
+note's path and nothing else.
+
+**Defaults taken**:
+
+1. The start is the run folder's full stamp, the moment Review was pressed (195A); the end is
+   `session.json`'s `ended_at`, the end of the review's last turn, in the seat's local time; the
+   runtime is the end less the start, in minutes to one decimal.
+2. The durations are the `drawing phase` and `text.delta` lines `Show-ReviewFacts` prints and the
+   line `Show-SetupTime` prints, word for word, and each `usage` event's `latency_s` as
+   `round <n>: <s> s`, to two decimals as the usage line shows its last round.
+3. The letter is given, never guessed: the folder's name holds the document's real name, not its
+   letter.
+4. It writes nothing, and says so, for a folder whose name does not begin with a stamp, that
+   holds no `session.json` and `events.jsonl`, or whose review has not ended.
+5. Step 4.1 runs it once the review has ended, after the answers' turn if it asked questions, and
+   before step 4.4 can send it anything; after a Retry, on the stopped run's folder too, so the
+   note holds both runs of the timed review.
+
+**Built** (2026-11-02, T084), in the seat plan: the function, after `Show-SetupTime`, takes the
+durations from what the two commands print, kept in the block and never printed, and reads the
+rounds from `events.jsonl`; what the commands do gives it a bullet, and `Show-ReviewFacts`' and
+`Show-SetupTime`'s bullets say it writes their timings; rule 5 names it; step 4.1's opening says
+it writes the start and end, the full stamp and the runtime, and a timing bullet runs it, with a
+warning that a Notepad left open on the note would save over the block; step 4.1's and step
+4.11's Record lines say it wrote the durations. It appends a blank line first, so a last line
+Notepad left unended stays whole.
+
+**Not changed**: step 4.5's item 1 still has the engineer note A's `last round <n> s` in the
+note: it is 009 T083's reading before and after a restore, taken after step 4.4 may have sent
+A's review a turn, which the block written at step 4.1 does not hold. Step 4.10's four timings
+are read by hand from the backend log or the host's statuses, as that step says, so a timed
+review's stay typed, as does a time noted when SOLIDWORKS stops answering. At M0-a rule 5
+names the command for the review its table times; that table is 197A's, written when M0-a is
+planned. The handover, the results sheet, the runbook and `CONTRIBUTING.md` say what stays where,
+not how it is copied, and are unchanged.
+
+**Tests changed on purpose**, with a dated note, none loosened:
+`test_a_real_designs_timing_figures_stay_out_of_the_findings_document` (step 4.1's opening: the
+command writes the start and end the engineer noted) and
+`test_the_specs_readme_counts_a_task_173a_closed_as_done` (007's row). New:
+`test_save_timing_note_appends_a_timed_reviews_figures_and_prints_only_where_it_wrote`,
+`test_save_timing_note_writes_nothing_for_a_folder_it_cannot_time`,
+`test_save_timing_note_reads_the_run_folder_and_the_backend_log_and_writes_only_the_note` and
+`test_step_4_1_writes_the_timed_reviews_figures_with_save_timing_note`. The two that run the
+function in Windows PowerShell point `%LOCALAPPDATA%` at a fictional backend log, so the
+machine's own logs are never read, and stand this interpreter in for `uv`.
+
+**Tests first**: T083's eight cases failed before T084, each for want of the function or its
+words. After T084 they pass, and four mutations of the function - an overwrite for the append, a
+printed figure, a misnumbered round, a write in the run folder - each turned them red. The README
+pin was red against 76 / 5 / 0 at T082 and against 77 / 8 / 0 at T085 before each recount.
+
+**Gates** (T085; 2026-11-02), on T085's tree:
+
+- Python 3.12.3, in the worktree's own environment, and 3.11.16 (`uv run --python 3.11
+  --isolated --all-extras`), the tokenizer required, over the seven modules that read the changed
+  files - `test_workstation_test_plan.py`, `test_workstation_handover.py`,
+  `test_update_workstation_script.py`, `test_seat_assumptions.py`, `test_seat_switch_evidence.py`,
+  `test_remodel_ledger.py` and the identifier scan, `test_tracked_files_carry_no_recorded_number.py`:
+  495 passed on each, none skipped.
+- `ruff check src tests` clean.
+- The link check over the cycle's five changed Markdown files: 114 relative links, anchors
+  included, none broken. Every changed file LF in the index.
+- No C# or page file changed, so no C# gate. No SOLIDWORKS process, seat task, or paid or live
+  test ran.
+
+*Changed 2026-11-02:* that tree came before cycle 14's own findings; the fixed tree's gates are
+the last part of this section.
+
+**Cycle 14's own findings** (review Tier 3, decision 180A: the gates and CI only, no review;
+2026-11-02, under T085).
+
+**Settled**, test first: a run folder whose name holds brackets got a wrong or missing setup
+line. A run folder's name holds its document's name, and Windows PowerShell reads a path given by
+`-Path`, or by position, as a wildcard, `[2]` being the one character `2`. `Show-SetupTime` read
+`"$run\events.jsonl"` so: for `fictional plate [2]` it read no file, printing an error and no
+setup line, or, beside a folder `fictional plate 2`, it read that folder's `events.jsonl` and
+timed another review's setup; and `Save-TimingNote` wrote the line it printed. Every path the
+setup block's helpers read or write now takes `-LiteralPath`, each helper checked:
+
+- `Show-SetupTime`'s `events.jsonl`;
+- the logs folder `Show-SetupTime` and `Show-DrawingReadLog` read: `Get-ChildItem -LiteralPath`
+  takes the folder and `-Filter` the logs' name pattern, and pipes the files to `Select-String`,
+  the same files in the same order as the `-Path` pattern read;
+- `Push-Location` into `$R\reviewer`, in the six helpers that run `uv`;
+- `Save-Fingerprint`'s `notes\paths.txt`, dumps folder and CSV, and `Compare-Fingerprint`'s two
+  CSVs.
+
+`Save-TimingNote`, `Show-FindingsByType` and `Get-SeatHash` already read literally.
+`Split-Path $run -Leaf` stays: it only cuts the string, and Windows PowerShell 5.1 takes no
+`-Leaf` with `-LiteralPath`.
+
+- Tests changed on purpose, this cycle's own, with a dated note, not loosened:
+  `test_save_timing_note_appends_a_timed_reviews_figures_and_prints_only_where_it_wrote` runs on
+  four folders, through the `plan_function` harness: the plain name; a name with brackets, alone
+  and beside a folder the brackets match, whose review started 30 s later; and the plain name
+  with the backend logs in a folder whose name holds brackets. `timed_run` takes the folder's
+  name.
+- New: `test_every_path_the_setup_blocks_helpers_read_or_write_is_literal`, read on every
+  platform - every call in the helpers that reads or writes a path names it by `-LiteralPath`,
+  but a `Select-String` fed by a pipe and `Split-Path $run -Leaf` - and
+  `test_show_drawing_read_log_reads_the_tool_service_logs_in_a_folder_with_brackets`.
+- Tests first: red, each for the finding's reason, while the plain case passed. Alone, no
+  `events.jsonl` and an error; beside the match, a setup of 30.0 s, the other folder's; under the
+  bracketed logs folder, `no POST /sessions 201 line after session.started`; the static pin
+  listing 14 calls - `Push-Location` in six helpers, `Show-SetupTime`'s two reads,
+  `Show-DrawingReadLog`'s, and `Save-Fingerprint`'s and `Compare-Fingerprint`'s five;
+  `Show-DrawingReadLog` printing nothing. Green after the fix, with no other test changed.
+
+**Settled**, the second item left open below, test first (2026-11-02): outside the setup block's
+helpers, the plan still gave a check folder and the run root by `-Path`. Step 5.2's
+`Select-String` read `"$run\report.md"` so: for a `-standards` folder whose name holds brackets
+it read no file and printed `False`, the step's pass. The run root is the folder the engineer
+types in the pane, whose name the run root's rule (`RunRootRule`, decisions 154A and 160A) lets
+hold brackets, and a bracket there left each listing of it empty, with no error: step 5.3 printed
+`no remodel folder` beside the tab's copy, step 6.2 would export no review and step 6.3 zip no
+run folder. A wildcard can bite there, so:
+
+- step 5.2 reads `report.md` by `-LiteralPath`;
+- the run root's five listings take it by `-LiteralPath`: step 5.3's two, T303a's wait for the
+  copy, with `"$H\runs-t303a"`, step 6.2's exports and step 6.3's folders.
+
+Not changed, each exempt by name in the new pin: the setup block's `%APPDATA%` read (line 458),
+which holds no document's name and lies in the account's profile, named after the Windows
+account, whose name cannot hold `[` or `]`, as do `%LOCALAPPDATA%`, `%TEMP%` and the handover
+folder, named by its date; and the checkout, `$R`, read at lines 610 and 611 and by the steps'
+`cd`. The checkout holds no document's name, and a bracket in its path fails the block's own
+check at once, a red `Cannot find path` and then `checkout found: False`; making it literal would
+touch some twenty commands, a line of the handover and five pins, so it stays in the backlog as a
+note.
+
+- Tests, new: `test_every_path_the_plans_powershell_builds_from_a_run_or_check_folder_is_literal`,
+  read on every platform - the helpers' pin carried to every command of the plan's PowerShell,
+  its blocks and the commands in its text: a command gives a path by `-Path` only when every name
+  it gives is in `NO_DOCUMENT_NAME`, the explicit exemptions, each in use, or when it only cuts
+  the string, so `$run`, `$check` or a name not yet written is read by `-LiteralPath`;
+  `test_step_5_2_reads_the_report_of_a_check_folder_whose_name_holds_brackets`, step 5.2's line
+  on a `-standards` folder, plain and with brackets, whose report says no revision table was
+  found, or does not; and
+  `test_step_5_3_finds_the_remodel_folder_under_a_run_root_whose_name_holds_brackets`.
+- Changed on purpose, this cycle's own, with a dated note: `PATH_CMDLET` matches
+  `Compress-Archive` and `cd` too, which the steps use; the helpers use neither.
+- Tests first: red, each for the finding's reason, while the plain cases passed. The whole-plan
+  pin listed six calls, step 5.2's and the five listings; step 5.2's line printed `False` for the
+  bracketed folder whose report says it; step 5.3's check printed `no remodel folder` under
+  `runs [pilot]`. Green after the fix, with no other test changed. Five mutants of plan lines
+  already literal - the copy of the run folders written in step 6.3's text, step 6.3's
+  `Compress-Archive`, step 4.5's `report.md` read and its kept copy, a `cd` into a run folder -
+  each turned the whole-plan pin red, listing that call alone; the plan was restored byte for
+  byte, its sha256 checked.
+
+**Left open**, in [`docs/review-backlog.md`](../../docs/review-backlog.md) under cycle 14:
+
+- `Show-SetupTime` takes the first `POST /sessions` 201 in the backend logs at or after the run's
+  `session.started`. If the timed review's own post was refused, that 201 is another review's
+  answer, and `Save-TimingNote` writes the line it gives.
+- The commands outside the setup block's helpers still pass a run folder, the run root or the
+  checkout by `-Path`. Step 5.2's `Select-String` on a check folder's `report.md` prints `False`,
+  its pass, for a folder whose name holds brackets, without reading the report; the run-root
+  listings of steps 5.3, 6.2 and 6.3 and the block's own `Set-Location $R` read a bracket as a
+  wildcard too. *Changed 2026-11-02:* settled above, all but the checkout, `$R`, which stays in
+  the backlog as a note.
+
+**Gates** (2026-11-02), on the fixed tree:
+
+- Python 3.12.3, the tokenizer required, over the seven modules above: 500 passed, none skipped.
+- `ruff check src tests` clean.
+- The link check over the cycle's six changed Markdown files, `docs/review-backlog.md` among
+  them: 116 relative links, anchors included, none broken. Every changed file LF in the index.
+- No C# or page file changed, so no C# gate. No SOLIDWORKS process, seat task, or paid or live
+  test ran.
+
+*Changed 2026-11-02:* that tree came before the second item's fix; the final tree's gates follow.
+
+**Gates** (2026-11-02), on the final tree:
+
+- Python 3.12.3, the tokenizer required, over the seven modules above: 507 passed, none skipped.
+- `ruff check src tests` clean.
+- The link check over the cycle's six changed Markdown files: 117 relative links, anchors
+  included, none broken. Every changed file LF in the index.
+- No C# or page file changed, so no C# gate. No SOLIDWORKS process, seat task, or paid or live
+  test ran.
+- *Changed 2026-11-03:* the whole suites ran on the final tree, cycle 14 stacked on cycles 12, 13
+  and 11 (`13611b22`): 18,914 passed and 5 skipped on Python 3.12.3 and the same on 3.11; ruff
+  clean; the identifier scan, 58 passed (T085's last sub-item).

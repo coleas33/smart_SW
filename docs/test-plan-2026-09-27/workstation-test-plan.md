@@ -221,7 +221,10 @@ SOLIDWORKS closes during step 5.3, follow its item C before anything else, and g
    findings document: its full stamp, the moment you pressed Review, goes in `notes\timing.txt`
    with its start and end times, so that no private figure can be worked out from the findings
    document (decision 195A). Its runtime, from start to end, and every other duration of it go in
-   `notes\timing.txt` too, never in the findings document (decision 196A). A review not timed,
+   `notes\timing.txt` too, never in the findings document (decision 196A). `Save-TimingNote`
+   writes them there once the review has ended (step 4.1): its full stamp, start and end times,
+   runtime and every duration the plan's commands print for it, so you copy none of them by hand;
+   the six minutes and the update's minutes you still type. A review not timed,
    B's among them, keeps its full stamp and its durations. Copy a log
    line only as far as the end of its `gated=`
    list; if it has `target=`, write that it did and how many paths, never the paths; replace any
@@ -458,7 +461,7 @@ if (-not $runs) { $runs = Join-Path ([Environment]::GetFolderPath('MyDocuments')
 function Show-ReviewFacts {
     param([string] $run)
     $run = $run.TrimEnd('\')
-    Push-Location "$R\reviewer"
+    Push-Location -LiteralPath "$R\reviewer"
     try { uv run python -c "import sys, json; from pathlib import Path; from datetime import datetime; from swreview.ir.loader import load_package; from swreview.report.session import load_session; from swreview.report.summary import drawings_of; from swreview.tools.checks_interference import groups_of; r = Path(sys.argv[1]); s = load_session(r / 'session.json'); p = load_package(r).package; ev = [json.loads(x) for x in (r / 'events.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]; us = [e for e in ev if e['type'] == 'usage']; first = us[0]['seq'] if us else 10**9; pre = [e['body']['tool'] for e in ev if e['type'] == 'tool.started' and e['seq'] < first]; later = [e['body']['tool'] for e in ev if e['type'] == 'tool.started' and e['seq'] > first]; keys = {g.group_key for g in groups_of(p)}; judged = {st.arguments.get('group_key') for st in s.steps if st.tool == 'check_interference_group'}; t = s.usage.totals if s.usage else None; print('tokens: input', t and t.input_tokens, '| cached', t and t.cached_input_tokens, '| uncached', t and t.uncached_input_tokens, '| rounds', s.usage and s.usage.rounds, '| turns', s.usage and s.usage.turns); print('findings', len(s.findings), '| contacts', len(s.contacts or []), '| interference rows in package.json', len(p.interferences), '| gaps', len(p.gaps)); print('interference groups', len(keys), '| judged', len(keys & judged), '| not judged', len(keys - judged)); print('pre-run tools:', ', '.join(dict.fromkeys(pre)) or 'none'); print('pre-run tools called again after the first model round:', ', '.join(sorted(set(pre) & set(later))) or 'none'); d = {x.name: x for x in p.extractor.phases}.get('drawing'); print('drawing phase:', (d.status + ('' if d.elapsed_ms is None else ' ' + str(d.elapsed_ms) + ' ms')) if d else 'not recorded'); dl = drawings_of(p); print('drawings line:', dl.text if dl else 'none'); ers = s.evidence_requests; print('questions: asked', len(ers), '| answered', sum(x.status == 'answered' for x in ers)); ans = [e['seq'] for e in ev if e['type'] == 'evidence.answered']; ends = [e['seq'] for e in ev if e['type'] == 'turn.ended']; print('answers sent', len(ans), '| turns ended between the first and last answer', sum(ans[0] < x < ans[-1] for x in ends) if ans else 0, '| turns ended after the last answer', sum(x > ans[-1] for x in ends) if ans else 0, '| first round input after the answers', next((e['body']['input_tokens'] for e in us if ans and e['seq'] > ans[-1]), None)); f = lambda a: datetime.fromisoformat(a.replace('Z', '+00:00')); st = next(e['at'] for e in ev if e['type'] == 'session.started'); td = next((e['at'] for e in ev if e['type'] == 'text.delta'), None); print('seconds from session.started to the first text.delta:', round((f(td) - f(st)).total_seconds(), 1) if td else 'no text.delta')" $run }
     finally { Pop-Location }
 }
@@ -466,7 +469,7 @@ function Show-ReviewFacts {
 function Show-SmokeFacts {
     param([string] $run)
     $run = $run.TrimEnd('\')
-    Push-Location "$R\reviewer"
+    Push-Location -LiteralPath "$R\reviewer"
     try { uv run python -c "import sys, json; from pathlib import Path; from swreview.report.attention_record import read_attention_record, StaleAttentionRecord; from swreview.checks.standards.registry import RULES; from swreview.checks.standards.report import PROFILE_LIMIT, stamped_profile_digest; r = Path(sys.argv[1]); s = json.loads((r / 'session.json').read_text(encoding='utf-8')); ev = [json.loads(line) for line in (r / 'events.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]; us = [e['body'] for e in ev if e['type'] == 'usage']; print('usage events', len(us), '| with served_model', sum(bool(b.get('served_model')) for b in us), '| served models', sorted({b['served_model'] for b in us if b.get('served_model')})); print('bodies with a retries field', sum('retries' in e['body'] for e in ev)); print('origin_marks', s.get('origin_marks', 'absent')); fs = [f for f in s.get('findings', []) if f.get('check') in RULES]; prefix, _, tail = PROFILE_LIMIT.partition('{name}'); names = [[lim.removeprefix(prefix).removesuffix(tail.format(sha256=dg)) for lim in f.get('coverage_limits', []) if (dg := stamped_profile_digest([lim])) is not None] for f in fs]; print('standards findings', len(fs), '| with a profile stamp', sum(any(row) for row in names), '| stamps naming a folder', sum('/' in name or chr(92) in name for row in names for name in row)); a = r / 'attention.json'; data = None; record = None; failure = None; stale = False; exec('try:\n    data = a.read_bytes()\n    record = read_attention_record(r)\nexcept (OSError, ValueError) as exc:\n    failure = type(exc).__name__\n    stale = isinstance(exc, StaleAttentionRecord)'); crlf = data.count(bytes([13, 10])) if data is not None else 0; state = 'stale' if stale else 'unreadable' if failure else 'reads as this session\'s record'; print('attention.json:', 'missing' if data is None else 'CRLF lines ' + str(crlf) if crlf else 'LF', '|', state, '| rows', len(record.rows) if record is not None else '-', *(['|', failure] if failure else [])); print('prompts.json:', 'present' if (r / 'prompts.json').exists() else 'absent')" $run }
     finally { Pop-Location }
 }
@@ -474,7 +477,7 @@ function Show-SmokeFacts {
 function Show-DumpFacts {
     param([string] $folder)
     $folder = $folder.TrimEnd('\')
-    Push-Location "$R\reviewer"
+    Push-Location -LiteralPath "$R\reviewer"
     try { uv run python -c "import sys; from collections import Counter; from swreview.ir.loader import load_package; from swreview.checks.fastener_identity import recognise_fasteners; p = load_package(sys.argv[1]).package; d = p.documents; print('documents', len(d), '| mass_overridden read', sum(x.mass_overridden is not None for x in d), '| mass_override gaps', sum(g.entity_kind == 'mass_override' for g in p.gaps)); w = [h for h in p.holes if h.wizard is not None]; print('holes', len(p.holes), '| Hole.wizard filled', len(w), '| fit classes', sorted({h.wizard.fit_class_raw for h in w if h.wizard.fit_class_raw}), '| thread classes', sorted({h.wizard.thread_class_raw for h in w if h.wizard.thread_class_raw})); print('model_dimensions', len(p.model_dimensions), '| model_annotations', len(p.model_annotations)); r = recognise_fasteners(p); print('fasteners', len(p.fasteners), dict(Counter(f.identity_source for f in p.fasteners)), '| with a shank face', sum(x.shank_face_id is not None for x in r))" $folder }
     finally { Pop-Location }
 }
@@ -482,7 +485,7 @@ function Show-DumpFacts {
 function Show-Documents {
     param([string] $run)
     $run = $run.TrimEnd('\')
-    Push-Location "$R\reviewer"
+    Push-Location -LiteralPath "$R\reviewer"
     try { uv run python -c "import sys; from swreview.ir.loader import load_package; p = load_package(sys.argv[1]).package; [print(d.document_id, d.kind, d.file_name) for d in p.documents]" $run }
     finally { Pop-Location }
 }
@@ -490,7 +493,7 @@ function Show-Documents {
 function Show-DrawingTables {
     param([string] $run)
     $run = $run.TrimEnd('\')
-    Push-Location "$R\reviewer"
+    Push-Location -LiteralPath "$R\reviewer"
     try { uv run python -c "import sys; from swreview.ir.loader import load_package; p = load_package(sys.argv[1]).package; [print(r.document_id, 'sheet', s.index + 1, '| revision tables', len(s.revision_tables), '| other tables', len(s.tables), '| bills of materials', sum(1 for x in s.tables if x.bom_rows)) for r in p.drawing_records for s in r.sheets]" $run }
     finally { Pop-Location }
 }
@@ -498,16 +501,43 @@ function Show-DrawingTables {
 function Show-SetupTime {
     param([string] $run)
     $run = $run.TrimEnd('\')
-    $started = [DateTimeOffset]((Get-Content "$run\events.jsonl" -TotalCount 1 | ConvertFrom-Json).at)
-    $created = Select-String -Path "$env:LOCALAPPDATA\SwReview\logs\backend-*.log" -SimpleMatch '"POST /sessions HTTP/1.1" 201' |
+    $started = [DateTimeOffset]((Get-Content -LiteralPath "$run\events.jsonl" -TotalCount 1 | ConvertFrom-Json).at)
+    $created = Get-ChildItem -LiteralPath "$env:LOCALAPPDATA\SwReview\logs" -Filter 'backend-*.log' |
+        Select-String -SimpleMatch '"POST /sessions HTTP/1.1" 201' |
         ForEach-Object { [DateTimeOffset]$_.Line.Substring(1, $_.Line.IndexOf(']') - 1) } |
         Where-Object { $_ -ge $started } | Sort-Object | Select-Object -First 1
     if ($created) { 'setup, from session.started to the 201 answer to POST /sessions: {0:N1} s' -f ($created - $started).TotalSeconds }
     else { 'no POST /sessions 201 line after session.started in the backend logs' }
 }
 
+function Save-TimingNote {
+    param([string] $run, [string] $letter)
+    $run = $run.TrimEnd('\')
+    $name = Split-Path $run -Leaf
+    $session = $null
+    if ($name -match '^\d{8}-\d{6}-' -and (Test-Path -LiteralPath "$run\session.json") -and (Test-Path -LiteralPath "$run\events.jsonl")) { $session = Get-Content -LiteralPath "$run\session.json" -Raw -Encoding UTF8 | ConvertFrom-Json }
+    if (-not $session.ended_at) { 'not the run folder of a review that has ended: nothing written'; return }
+    if (-not $letter) { 'give the review''s letter too, as in Save-TimingNote $run ''A'': nothing written'; return }
+    $invariant = [Globalization.CultureInfo]::InvariantCulture
+    $start = [DateTimeOffset][datetime]::ParseExact($name.Substring(0, 15), 'yyyyMMdd-HHmmss', $invariant)
+    $end = ([DateTimeOffset]$session.ended_at).ToLocalTime()
+    $facts = @(Show-ReviewFacts $run)
+    $block = @('', "$($name.Substring(0, 8))-$letter", "full stamp: $($name.Substring(0, 15))", "start: $($start.ToString('yyyy-MM-dd HH:mm:ss', $invariant))", "end: $($end.ToString('yyyy-MM-dd HH:mm:ss', $invariant))", "runtime, from start to end: $(($end - $start).TotalMinutes.ToString('0.0', $invariant)) min")
+    foreach ($label in 'drawing phase: ', 'seconds from session.started to the first text.delta: ') {
+        $line = @($facts | Where-Object { $_.StartsWith($label) })
+        $block += $(if ($line) { $line[0] } else { $label + 'not read' })
+    }
+    $block += @(Show-SetupTime $run)
+    $rounds = @(Select-String -LiteralPath "$run\events.jsonl" -Pattern '"type":\s*"usage"' | ForEach-Object { ($_.Line | ConvertFrom-Json).body.latency_s })
+    if ($rounds.Count -eq 0) { $block += 'round times: none' }
+    for ($i = 0; $i -lt $rounds.Count; $i++) { $block += 'round {0}: {1}' -f ($i + 1), $(if ($null -eq $rounds[$i]) { 'unknown' } else { $rounds[$i].ToString('0.00', $invariant) + ' s' }) }
+    Add-Content -LiteralPath "$H\notes\timing.txt" -Value $block -Encoding UTF8 -ErrorAction Stop
+    "appended to $H\notes\timing.txt"
+}
+
 function Show-DrawingReadLog {
-    Select-String -Path "$env:LOCALAPPDATA\SwReview\logs\tool-service-*.log" -SimpleMatch 'command=drawing.read' |
+    Get-ChildItem -LiteralPath "$env:LOCALAPPDATA\SwReview\logs" -Filter 'tool-service-*.log' |
+        Select-String -SimpleMatch 'command=drawing.read' |
         Select-Object -Last 3 | ForEach-Object { $_.Line }
 }
 
@@ -536,8 +566,8 @@ function Get-SeatHash {
 
 function Save-Fingerprint {
     param([string] $name)
-    $paths = @(Get-Content "$H\notes\paths.txt" -ErrorAction SilentlyContinue | ForEach-Object { $_.Trim().Trim('"') } | Where-Object { $_ })
-    foreach ($package in @(Get-ChildItem "$H\dumps" -Filter package.json -Recurse -ErrorAction SilentlyContinue)) {
+    $paths = @(Get-Content -LiteralPath "$H\notes\paths.txt" -ErrorAction SilentlyContinue | ForEach-Object { $_.Trim().Trim('"') } | Where-Object { $_ })
+    foreach ($package in @(Get-ChildItem -LiteralPath "$H\dumps" -Filter package.json -Recurse -ErrorAction SilentlyContinue)) {
         $paths += @(Select-String -LiteralPath $package.FullName -Pattern '"path":\s*"([^"]+)"' -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { [regex]::Unescape($_.Groups[1].Value) } | Where-Object { $_ -match '\.(sldprt|sldasm|slddrw)$' })
     }
     $rows = @(foreach ($path in @($paths | Sort-Object -Unique)) {
@@ -548,16 +578,16 @@ function Save-Fingerprint {
         }
         else { [pscustomobject]@{ Path = $path; Length = ''; Written = ''; ReadOnly = ''; SHA256 = 'missing' } }
     })
-    $rows | Export-Csv "$H\notes\fingerprint-$name.csv" -NoTypeInformation -Encoding UTF8
+    $rows | Export-Csv -LiteralPath "$H\notes\fingerprint-$name.csv" -NoTypeInformation -Encoding UTF8
     "fingerprint-$name`: $($rows.Count) files, $(@($rows | Where-Object SHA256 -eq 'missing').Count) missing, $(@($rows | Where-Object SHA256 -eq 'unreadable').Count) unreadable, $(@($rows | Where-Object ReadOnly -eq $false).Count) writable"
 }
 
 function Compare-Fingerprint {
     param([string] $name)
     $before = @{}
-    foreach ($row in @(Import-Csv "$H\notes\fingerprint-before.csv")) { $before[$row.Path] = $row }
+    foreach ($row in @(Import-Csv -LiteralPath "$H\notes\fingerprint-before.csv")) { $before[$row.Path] = $row }
     $changed = @(); $compared = 0; $notCompared = 0
-    foreach ($row in @(Import-Csv "$H\notes\fingerprint-$name.csv")) {
+    foreach ($row in @(Import-Csv -LiteralPath "$H\notes\fingerprint-$name.csv")) {
         $old = $before[$row.Path]
         if (-not $old -or $old.SHA256 -eq 'missing' -or $row.SHA256 -eq 'missing') { $notCompared++; continue }
         $compared++
@@ -572,7 +602,7 @@ function Show-RemodelLedger {
     param([string] $folder)
     $ledgers = @(Get-ChildItem -LiteralPath "$($folder.TrimEnd('\'))\capabilities" -Filter 'remodel-*.yaml' -ErrorAction SilentlyContinue)
     if ($ledgers.Count -eq 0) { 'no answers file in this folder: the run did not finish'; return }
-    Push-Location "$R\reviewer"
+    Push-Location -LiteralPath "$R\reviewer"
     try { foreach ($ledger in $ledgers) { uv run swreview remodel ledger $ledger.FullName } }
     finally { Pop-Location }
 }
@@ -599,7 +629,7 @@ What the commands do, so you know what you are running (each only reads):
   interference groups judged, which checks ran before the model's first round, its drawings line,
   its questions and answers, and a timing. On a timed review's folder, the `drawing phase` line's
   milliseconds and that timing, `seconds from session.started to the first text.delta`, go in
-  `notes\timing.txt` only (rule 5).
+  `notes\timing.txt` only (rule 5), where `Save-TimingNote` writes them.
 - `Show-SmokeFacts '<run folder>'` prints feature 014's smoke facts: usage events with the served
   model, bodies with a retries field, origin marks, standards profile stamps naming a folder,
   attention.json's line endings, whether it reads as this session's record and its row count,
@@ -609,7 +639,18 @@ What the commands do, so you know what you are running (each only reads):
 - `Show-Documents '<run folder>'` lists a review's documents with their ids: `doc:` and twelve
   letters and digits, like `doc:3f2a9c1b7e04`.
 - `Show-SetupTime '<run folder>'` reads the backend log for how long the review's setup took; on a
-  timed review's folder, its line goes in `notes\timing.txt` only (rule 5).
+  timed review's folder, its line goes in `notes\timing.txt` only (rule 5), where `Save-TimingNote`
+  writes it.
+- `Save-TimingNote '<run folder>' '<letter>'` writes a timed review's figures in `notes\timing.txt`
+  once the review has ended, so that you copy none of them by hand (rule 5). It appends one
+  block, headed by the folder's date and letter (`20261101-A`): the folder's full stamp; the
+  review's start, which is that stamp, the moment Review was pressed, and its end, `session.json`'s
+  `ended_at` in this machine's time; its runtime, from start to end; the `drawing phase` and
+  `text.delta` lines `Show-ReviewFacts` prints and the line `Show-SetupTime` prints; and each
+  model round's time (`round <n>: <s> s`), the usage line's `last round` the last of them. It
+  reads only the run folder and the backend log, writes nothing but that note, never in the run
+  folder, calls no model, and prints only the note's path, never a figure. Given a folder that
+  is not the run folder of a review that has ended, or no letter, it writes nothing and says so.
 - `Show-DrawingReadLog` prints the last three `drawing.read` lines of the tool-service logs; the
   last line printed is the newest.
 - `Show-FindingsByType '<run folder>'` prints, for each group of the run folder's `report.md`
@@ -1725,15 +1766,16 @@ itself, or press its chip. Pressing the chip of the review already on screen doe
 
 ### 4.1 A, the small assembly [008 T103; 009 T079; 007 T059]
 
-Open A resolved and make it active; press Review (the box above). Note the time it started and
-finished in `notes\timing.txt`, with A's minutes (the 007 T060 bullet below), never in the
-findings document: when you watch the whole review, the two times are its supervision (decision
-192A (the owner's answer of 2026-11-01, 13A)). Its run folder's full stamp goes in
-`notes\timing.txt` too: the date and time its name begins with (`20261101-101112`), the moment
-you pressed Review; the findings document writes the folder by its date and letter only, as
-`20261101-A` (rule 5; decision 195A). Its runtime, the minutes from start to end, goes in
-`notes\timing.txt` too, with every other duration of that review, never in the findings document
-(decision 196A).
+Open A resolved and make it active; press Review (the box above). A's review is the one timed:
+`Save-TimingNote` writes its start and end in `notes\timing.txt`, beside A's minutes, which you
+type (the 007 T060 bullet below), never in the findings document: when you watch the whole
+review, the two times are its supervision (decision 192A (the owner's answer of 2026-11-01,
+13A)). Its run folder's full stamp goes in `notes\timing.txt` too: the date and time its name
+begins with (`20261101-101112`), the moment you pressed Review, which is the review's start; the
+findings document writes the folder by its date and letter only, as `20261101-A` (rule 5;
+decision 195A). Its runtime, the minutes from start to end, goes in `notes\timing.txt` too, with
+every other duration of that review, never in the findings document (decision 196A). You note
+none of them by hand: the timing bullet below writes them all once the review has ended.
 
 - 008 T103, pass: the `tokens` line's `input` is **at most 300,000**. The last sitting's reviews of
   the small assembly took 1.47 million and 1.58 million. Fail: above 300,000. The task counts the
@@ -1755,6 +1797,21 @@ you pressed Review; the findings document writes the folder by its date and lett
   their words.
 - If the review asked questions, answer them all in one send (box, item 5) and run
   `Show-ReviewFacts $run` again: record both `tokens` lines, before and after.
+- The timing (rule 5): once the review has ended, after the answers' turn if it asked questions,
+  and before step 4.4 can send it anything, write its figures in `notes\timing.txt`:
+
+  ```powershell
+  Save-TimingNote $run 'A'
+  ```
+
+  It prints `appended to` and the note's path, and nothing else. The block it appended is headed
+  by the folder's date and letter (`20261101-A`) and holds the full stamp, the start and end, the
+  runtime, the `drawing phase` and `text.delta` lines, the setup line and each round's time, the
+  usage line's `last round <n> s` the last of them: copy none of it anywhere else. Have the note
+  closed in Notepad when you run it, what you typed saved first: a Notepad still open on it would
+  save over the block. After a Retry (box, item 6), run it on the stopped run's folder too. If it
+  prints `not the run folder of a review that has ended: nothing written`, the review has not
+  ended yet or `$run` is not its run folder: put that right and run it again.
 - 007 T059, the Review half, as feature 013 changed it (013 T057): once the review has ended
   (after the answers' turn, if it asked questions), Results shows **Findings by type** below the
   summary and the questions: the groups in their fixed order - Interference and fit, Fasteners,
@@ -1811,8 +1868,9 @@ Record: the facts, the headline, the tally line, the not-reached line, the group
 the drawings line (with letters in place of names) and the usage line, but no duration of the
 review: the `drawing phase` line's milliseconds, the `seconds from session.started to the first
 text.delta` line and the usage line's `last round <n> s` go in `notes\timing.txt` only (rule 5;
-decision 196A); never the start and end times or the run folder's full stamp, which stay in
-`notes\timing.txt` (decision 192A (the owner's answer of 2026-11-01, 13A); decision 195A).
+decision 196A), where `Save-TimingNote` wrote them; never the start and end times or the run
+folder's full stamp, which stay in `notes\timing.txt` (decision 192A (the owner's answer of
+2026-11-01, 13A); decision 195A).
 
 Do step 4.11 (014 T221) now on this review's folder, then step 4.2.
 
@@ -2283,7 +2341,9 @@ Record: full sitting or alone; pass or fail for each check, each printed facts l
 in place of names, and its durations in `notes\timing.txt` only: rule 5), the on-screen summary,
 findings and questions, and the run
 folder's date and letter, never its full stamp (rule 5: A's review is the one timed), in
-014 T221's Results row and under step 4.11's record heading in the findings document. Keep the file contents in the run folder, which travels with step 6.3's
+014 T221's Results row and under step 4.11's record heading in the findings document. Step 4.1's
+`Save-TimingNote` has written those durations, and the folder's full stamp, in
+`notes\timing.txt`: copy them nowhere. Keep the file contents in the run folder, which travels with step 6.3's
 evidence; the results sheet
 travels in the handover folder and is committed from the development machine (runbook section 8).
 Nothing of the small assembly, its path or its numbers enters the repository.
@@ -2362,7 +2422,7 @@ Standards tab press **Standards check**. Copy its `-standards` folder into `$run
 
 ```powershell
 Show-DrawingTables $run
-Select-String -Path "$run\report.md" -SimpleMatch 'no revision table was found' -Quiet
+Select-String -LiteralPath "$run\report.md" -SimpleMatch 'no revision table was found' -Quiet
 ```
 
 Pass (SC-009): the sheet that shows a revision table prints `revision tables 1` (or more) and the
@@ -2414,7 +2474,7 @@ B. **A throwaway box, before any real part.** In the ordinary window:
    **Remodel a copy**. Pass: it ends with `Planned. Press Start to apply the plan to the copy.` Then:
 
    ```powershell
-   $run = Get-ChildItem $runs -Directory | Where-Object { $_.Name -like '*-remodel' } | Sort-Object CreationTime | Select-Object -Last 1
+   $run = Get-ChildItem -LiteralPath $runs -Directory | Where-Object { $_.Name -like '*-remodel' } | Sort-Object CreationTime | Select-Object -Last 1
    Get-Content -LiteralPath (Join-Path $run.FullName 'remodel-open.jsonl') | ForEach-Object { ($_ | ConvertFrom-Json).phase }
    Select-String -LiteralPath (Join-Path $run.FullName 'remodel.log') -SimpleMatch 'stage=' | Select-Object -Last 2 | ForEach-Object { $_.Line }
    (Select-String -LiteralPath (Join-Path $run.FullName 'remodel.log') -SimpleMatch 'stage=').Count
@@ -2505,7 +2565,7 @@ Get-SeatHash $f; Get-Item -LiteralPath $f | Select-Object Length, LastWriteTime,
 3. If it planned, check that it planned on a copy:
 
    ```powershell
-   $run = Get-ChildItem $runs -Directory | Where-Object { $_.Name -like '*-remodel' } | Sort-Object CreationTime | Select-Object -Last 1
+   $run = Get-ChildItem -LiteralPath $runs -Directory | Where-Object { $_.Name -like '*-remodel' } | Sort-Object CreationTime | Select-Object -Last 1
    if (-not $run) { 'no remodel folder' } else { "remodel folder $($run.Name.Substring(0, 15)) | copies in it: $(@(Get-ChildItem -LiteralPath (Join-Path $run.FullName 'copy') -Filter '*-RMS.SLDPRT' -ErrorAction SilentlyContinue).Count)" }
    ```
 
@@ -2565,7 +2625,7 @@ fakes' (decision 169A). A plan waiting for Start is 004 T303b's, after Start is 
 
    ```powershell
    $start = Get-Date; $open = $null
-   while (-not $open -and ((Get-Date) - $start).TotalMinutes -lt 5) { Start-Sleep -Milliseconds 100; $open = Get-ChildItem $runs, "$H\runs-t303a" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*-remodel' -and $_.CreationTime -gt $start -and (Select-String -LiteralPath (Join-Path $_.FullName 'remodel-open.jsonl') -SimpleMatch 'open_record.written' -Quiet -ErrorAction SilentlyContinue) } | Select-Object -First 1 }
+   while (-not $open -and ((Get-Date) - $start).TotalMinutes -lt 5) { Start-Sleep -Milliseconds 100; $open = Get-ChildItem -LiteralPath $runs, "$H\runs-t303a" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*-remodel' -and $_.CreationTime -gt $start -and (Select-String -LiteralPath (Join-Path $_.FullName 'remodel-open.jsonl') -SimpleMatch 'open_record.written' -Quiet -ErrorAction SilentlyContinue) } | Select-Object -First 1 }
    $p = Get-Process -Id $backend -ErrorAction SilentlyContinue
    if ($open -and $p -and $p.ProcessName -in 'uv', 'swreview', 'python') { Stop-Process -Id $backend; "ended the backend, pid $backend" } else { 'nothing was ended: no copy opened within 5 minutes, or that number is no longer a backend' }
    ```
@@ -2882,7 +2942,7 @@ it leaves out `tool-results\` by design (6.3 carries the whole folders).
 
 ```powershell
 cd "$R\reviewer"
-Get-ChildItem $runs -Directory | Where-Object { $_.CreationTime -ge $since -and $_.Name -notmatch '-(check|standards|remodel)$' } | ForEach-Object { uv run swreview handoff $_.FullName --out "$H\exports\$($_.Name).zip" }
+Get-ChildItem -LiteralPath $runs -Directory | Where-Object { $_.CreationTime -ge $since -and $_.Name -notmatch '-(check|standards|remodel)$' } | ForEach-Object { uv run swreview handoff $_.FullName --out "$H\exports\$($_.Name).zip" }
 cd $R
 ```
 
@@ -2893,7 +2953,7 @@ only: rule 5), and the files it names.
 ### 6.3 The whole run folders, the logs, the probe reports and the dumps
 
 ```powershell
-$folders = @(Get-ChildItem $runs -Directory | Where-Object { $_.CreationTime -ge $since })
+$folders = @(Get-ChildItem -LiteralPath $runs -Directory | Where-Object { $_.CreationTime -ge $since })
 $folders | Select-Object Name
 $need = [math]::Round((($folders | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Recurse -File }) | Measure-Object Length -Sum).Sum / 1GB, 2)
 "the run folders take $need GB; free on C: $([math]::Round((Get-PSDrive C).Free / 1GB, 1)) GB"

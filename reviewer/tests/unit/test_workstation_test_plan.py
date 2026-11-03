@@ -3083,7 +3083,13 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
 
     *Changed 2026-11-02 on purpose (002 T374; the owner's pick of four Review page fixes):* 002's
     row is recounted with T370 to T374 ticked, the four Review page fixes built: 366 done, 4
-    open."""
+    open.
+
+    *Changed 2026-11-02 on purpose (007 T082; cycle 14):* 007's row is recounted with cycle 14's
+    tasks, T082 to T085, T082 ticked: 77 done, 8 open.
+
+    *Changed 2026-11-02 on purpose (007 T085; cycle 14):* 007's row is recounted with T083 to T085
+    ticked, the timing note's seat command built: 80 done, 5 open."""
     readme = (REPO / "specs" / "README.md").read_text(encoding="utf-8")
     flat = re.sub(r"\s+", " ", readme)
     rows = {line[2:5]: line for line in readme.splitlines() if re.match(r"^\| \d{3} \|", line)}
@@ -3100,7 +3106,7 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
         assert "Closed on 2026-10-31 (decision 173A)" in rows[number], number
         assert closed in rows[number].split("Closed on 2026-10-31")[1], number
     assert "| 393 / 22 / 0 |" in rows["004"]
-    assert "| 76 / 5 / 0 |" in rows["007"]
+    assert "| 80 / 5 / 0 |" in rows["007"]
     assert "T180" not in rows["004"]
     for task in ("T182", "T187", "T303a", "T303b", "T353"):
         assert re.search(rf"\b{task}\b", rows["004"]), task
@@ -3454,7 +3460,12 @@ def test_a_real_designs_timing_figures_stay_out_of_the_findings_document(
     runtime, from start to end, in the note with every other duration of it, and its Record line
     sends there the durations the facts and the usage line show - the `drawing phase` line's
     milliseconds, the seconds to the first `text.delta` and the last round's seconds; and
-    `CONTRIBUTING.md`'s rule names the runtime and its other durations."""
+    `CONTRIBUTING.md`'s rule names the runtime and its other durations.
+
+    *Changed 2026-11-02 on purpose (007 T083; cycle 14):* step 4.1's opening has `Save-TimingNote`
+    write the timed review's start and end in `notes\\timing.txt`, where it had the engineer note
+    them there by hand; the pin reads the new words, which send the same two times to the same
+    note."""
     flat = re.sub(r"\s+", " ", plan)
     review = re.sub(r"\s+", " ", step(plan, "4.1"))
     opening = review[: review.index("- 008 T103")]
@@ -3503,7 +3514,9 @@ def test_a_real_designs_timing_figures_stay_out_of_the_findings_document(
     assert "`session.json carries a baseline: True`" in item_4
     assert re.search(r"(?m)\.timing\.baseline_minutes\s*$", step(plan, "4.5")) is None
     # The timed review's start and end times (decision 192A).
-    assert f"Note the time it started and finished in {TIMING_NOTE}" in opening
+    assert f"`Save-TimingNote` writes its start and end in {TIMING_NOTE}, beside A's minutes" in (
+        opening
+    )
     assert DECISION_192A in opening
     assert "never the start and end times" in record_41
     assert "the usage line, and the start and end times" not in flat
@@ -3846,3 +3859,547 @@ def test_a_timed_reviews_run_folder_is_written_by_its_date_and_letter(
     assert (
         f"the printed facts lines (their durations in {TIMING_NOTE} only: the test plan's rule 5)"
     ) in smoke
+
+
+# --- the timing note's seat command (007 T083; cycle 14) -----------------------------------------
+
+
+TIMED_RUN = "20261101-101112-fictional plate"
+"""A timed review's run folder as the add-in names it (`RunFolders.cs`): its full stamp, the
+moment Review was pressed, then its document's name, a fictional one with a space."""
+BRACKETED_RUN = "20261101-101112-fictional plate [2]"
+"""The same for a document whose name holds brackets. Windows PowerShell reads a path given by
+`-Path`, or by position, as a wildcard, where `[2]` is the one character `2` (cycle 14's own
+findings)."""
+NOT_TIMED = "not the run folder of a review that has ended: nothing written"
+NO_LETTER = "give the review's letter too, as in Save-TimingNote $run 'A': nothing written"
+TYPED = b"A\r\nbaseline 120"
+"""What the engineer typed in the note before the command runs, its last line left unended, as
+Notepad leaves it."""
+
+
+def timed_run(tmp_path: Path, name: str = TIMED_RUN) -> Path:
+    """A fictional timed review's run folder named `name`, copied from the replay
+    `Show-ReviewFacts` reads: its drawing phase took 1,234 ms, and it ended 14 min 18.4 s after
+    Review was pressed."""
+    run = tmp_path / name
+    shutil.copytree(REVIEW_RUN, run)
+    package = json.loads((run / "package.json").read_text(encoding="utf-8"))
+    [drawing] = [phase for phase in package["extractor"]["phases"] if phase["name"] == "drawing"]
+    drawing.update(status="ok", elapsed_ms=1234)
+    (run / "package.json").write_text(json.dumps(package), encoding="utf-8")
+    session = json.loads((run / "session.json").read_text(encoding="utf-8"))
+    pressed = datetime(2026, 11, 1, 10, 11, 12).astimezone()
+    ended = pressed + timedelta(minutes=14, seconds=18.4)
+    session["ended_at"] = ended.astimezone(UTC).isoformat()
+    (run / "session.json").write_text(json.dumps(session), encoding="utf-8")
+    return run
+
+
+def typed_note(tmp_path: Path) -> Path:
+    """`notes\\timing.txt` in a fictional handover folder, holding `TYPED`."""
+    note = tmp_path / "handover" / "notes" / "timing.txt"
+    note.parent.mkdir(parents=True)
+    note.write_bytes(TYPED)
+    return note
+
+
+def files_of(folder: Path) -> dict[str, bytes]:
+    """Every file under `folder`, by its path relative to it, with its bytes."""
+    return {
+        path.relative_to(folder).as_posix(): path.read_bytes()
+        for path in sorted(folder.rglob("*"))
+        if path.is_file()
+    }
+
+
+def with_save_timing_note(
+    plan: str, lines: list[str], handover: Path, local: Path, folder: Path
+) -> list[str]:
+    """What `lines` print in Windows PowerShell after the setup block's `Show-ReviewFacts`,
+    `Show-SetupTime` and `Save-TimingNote`, with `$R` this checkout, `$H` the handover folder
+    `handover` and `local` as `%LOCALAPPDATA%`, where the backend logs are read: never the
+    machine's own. `uv` stands for this interpreter, as `uv run python` does at the seat."""
+    quoted = {
+        name: str(path).replace("'", "''")
+        for name, path in (
+            ("R", REPO), ("H", handover), ("local", local), ("python", sys.executable)
+        )
+    }
+    script = "\n".join([
+        f"$R = '{quoted['R']}'",
+        f"$H = '{quoted['H']}'",
+        f"$env:LOCALAPPDATA = '{quoted['local']}'",
+        f"function uv {{ $rest = @($args | Select-Object -Skip 2); & '{quoted['python']}' @rest }}",
+        plan_function(plan, "Show-ReviewFacts"),
+        plan_function(plan, "Show-SetupTime"),
+        plan_function(plan, "Save-TimingNote"),
+        *lines,
+        "",
+    ])
+    return run_powershell(script, folder)
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+@pytest.mark.parametrize(
+    "case",
+    [
+        "a plain name",
+        "a name with brackets",
+        "a name with brackets beside a folder they match",
+        "the backend logs in a folder with brackets",
+    ],
+)
+def test_save_timing_note_appends_a_timed_reviews_figures_and_prints_only_where_it_wrote(
+    plan: str, tmp_path: Path, case: str
+) -> None:
+    """007 T083 (cycle 14): at a timed review the engineer copied into `notes\\timing.txt` by hand
+    its run folder's full stamp, its start and end times and every duration the plan's commands
+    print for it. `Save-TimingNote` appends them in one block headed by the folder's date and
+    letter: the full stamp; the start, which is that stamp, the moment Review was pressed
+    (decision 195A); the end, `session.json`'s `ended_at` in local time; the runtime between them;
+    the `drawing phase` and `text.delta` lines `Show-ReviewFacts` prints and the line
+    `Show-SetupTime` prints, word for word; and each round's time, to two decimals as the usage
+    line shows the last (decision 196A). It prints only where it wrote, never a figure, so nothing
+    on the console can be copied into the findings document; each call appends, after what the
+    engineer typed, even a last line Notepad left unended; and it reads the run folder and the
+    backend log without changing either, the note being the one file it writes.
+
+    *Changed 2026-11-02 on purpose (cycle 14's own findings; 007 T085):* it runs too on a run
+    folder whose name holds brackets, as a document's name may - alone, and beside a folder they
+    match (`fictional plate 2` for `fictional plate [2]`) - and with the backend logs in a folder
+    whose name holds brackets. `Show-SetupTime` read `events.jsonl` and the logs by `-Path`, which
+    Windows PowerShell reads as a wildcard: alone it read no file and printed an error, beside the
+    match it timed that folder's review, under the bracketed folder it read no log, and
+    `Save-TimingNote` wrote the line it printed."""
+    run = timed_run(tmp_path, BRACKETED_RUN if case.startswith("a name with") else TIMED_RUN)
+    note = typed_note(tmp_path)
+    handover = note.parent.parent
+    events = [
+        json.loads(line)
+        for line in (run / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    started = datetime.fromisoformat(events[0]["at"].replace("Z", "+00:00"))
+    if case == "a name with brackets beside a folder they match":
+        # `[2]` matches `2`: a review there started 30 s later, so its setup would read 30.0 s.
+        match = tmp_path / BRACKETED_RUN.replace("[2]", "2")
+        match.mkdir()
+        (match / "events.jsonl").write_text(
+            json.dumps({**events[0], "at": (started + timedelta(seconds=30)).isoformat()}) + "\n",
+            encoding="utf-8",
+        )
+    local = tmp_path / ("local [1]" if case.startswith("the backend logs") else "local")
+    (local / "SwReview" / "logs").mkdir(parents=True)
+    (local / "SwReview" / "logs" / "backend-20261101-100000.log").write_text(
+        "".join(
+            f'[{(started + timedelta(seconds=offset)).isoformat()}] INFO:     127.0.0.1:50000 - '
+            '"POST /sessions HTTP/1.1" 201 Created\n'
+            for offset in (-4.0, 8.2, 60.0)
+        ),
+        encoding="utf-8",
+    )
+    before = {"run": files_of(run), "local": files_of(local)}
+    facts = run_one_liner(one_liner_of(plan, "Show-ReviewFacts"), run)
+    rounds = [event["body"]["latency_s"] for event in events if event["type"] == "usage"]
+    quoted = str(run).replace("'", "''")
+
+    printed = with_save_timing_note(
+        plan,
+        [
+            f"Save-TimingNote '{quoted}' 'A'",
+            f"Save-TimingNote '{quoted}\\' 'A'",
+            "'---'",
+            f"Show-SetupTime '{quoted}'",
+        ],
+        handover,
+        local,
+        tmp_path,
+    )
+
+    saved, setup = printed[: printed.index("---")], printed[printed.index("---") + 1 :]
+    block = [
+        "20261101-A",
+        "full stamp: 20261101-101112",
+        "start: 2026-11-01 10:11:12",
+        "end: 2026-11-01 10:25:30",
+        "runtime, from start to end: 14.3 min",
+        line_starting(facts, "drawing phase: "),
+        line_starting(facts, "seconds from session.started to the first text.delta: "),
+        *setup,
+        *[f"round {index}: {seconds:.2f} s" for index, seconds in enumerate(rounds, start=1)],
+    ]
+    assert saved == [f"appended to {note}"] * 2
+    assert note.read_text(encoding="utf-8").splitlines() == [
+        "A", "baseline 120", *block, "", *block
+    ]
+    assert line_starting(facts, "drawing phase: ") == "drawing phase: ok 1234 ms"
+    assert re.fullmatch(
+        r"setup, from session\.started to the 201 answer to POST /sessions: 8[.,]2 s", setup[-1]
+    ), setup
+    assert len(setup) == 1 and len(rounds) == 41
+    assert files_of(run) == before["run"]
+    assert files_of(local) == before["local"]
+    assert list(files_of(handover)) == ["notes/timing.txt"]
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+@pytest.mark.parametrize(
+    "case",
+    [
+        "a folder not named by a stamp",
+        "a check's folder",
+        "a review that has not ended",
+        "no letter",
+    ],
+)
+def test_save_timing_note_writes_nothing_for_a_folder_it_cannot_time(
+    plan: str, tmp_path: Path, case: str
+) -> None:
+    """It times only a review's run folder whose review has ended, under the letter it is given:
+    a folder whose name does not begin with a stamp, a check's folder, which keeps no event
+    stream, a review still running or cut off before its end was saved (`ended_at` null), and a
+    call without the letter each print why, and the note keeps its bytes."""
+    run, letter = timed_run(tmp_path), " 'A'"
+    if case == "a folder not named by a stamp":
+        run = run.rename(tmp_path / "fictional plate")
+    elif case == "a check's folder":
+        run = tmp_path / "20261101-101112-fictional plate-check"
+        shutil.copytree(FIXTURES / "attention" / "check-folder", run)
+    elif case == "a review that has not ended":
+        session = json.loads((run / "session.json").read_text(encoding="utf-8"))
+        session["ended_at"] = None
+        (run / "session.json").write_text(json.dumps(session), encoding="utf-8")
+    else:
+        letter = ""
+    note = typed_note(tmp_path)
+    local = tmp_path / "local"
+    local.mkdir()
+    before = files_of(run)
+    quoted = str(run).replace("'", "''")
+
+    printed = with_save_timing_note(
+        plan, [f"Save-TimingNote '{quoted}'{letter}"], note.parent.parent, local, tmp_path
+    )
+
+    assert printed == [NO_LETTER if case == "no letter" else NOT_TIMED]
+    assert note.read_bytes() == TYPED
+    assert files_of(run) == before
+    assert list(files_of(note.parent.parent)) == ["notes/timing.txt"]
+
+
+def test_save_timing_note_reads_the_run_folder_and_the_backend_log_and_writes_only_the_note(
+    plan: str,
+) -> None:
+    """007 T083 (cycle 14), the definition, read on every platform (the two tests above need
+    Windows PowerShell): the function sits in the setup block after the two commands whose lines
+    it takes; it reads no file but the run folder's `session.json` and `events.jsonl` and what
+    those two commands read - the run folder, and the backend log `Show-SetupTime` reads - and it
+    writes one, appending to `$H\\notes\\timing.txt`, with no other command that writes. What
+    `Show-ReviewFacts` and `Show-SetupTime` print is kept in the block, never printed; the
+    function prints the note's path, or why it wrote nothing, and no figure; and it calls no
+    model."""
+    function = plan_function(plan, "Save-TimingNote")
+    setup = section(plan, "Every PowerShell window: paste this first")
+    lines = [line.strip() for line in function.splitlines()]
+
+    assert (
+        setup.index("function Show-ReviewFacts ")
+        < setup.index("function Show-SetupTime ")
+        < setup.index("function Save-TimingNote ")
+        < setup.index("Set-Location $R")
+    )
+    assert lines[1] == "param([string] $run, [string] $letter)"
+    assert sorted(set(re.findall(r'"(\$\w+\\[^"$]+)"', function))) == [
+        "$H\\notes\\timing.txt", "$run\\events.jsonl", "$run\\session.json"
+    ]
+    assert re.findall(r"\bShow-\w+", function) == ["Show-ReviewFacts", "Show-SetupTime"]
+    assert "$facts = @(Show-ReviewFacts $run)" in lines
+    assert "$block += @(Show-SetupTime $run)" in lines
+    assert re.findall(r"\b(?:Add|Set|Clear|Out|Export|New|Write|Tee)-\w+", function) == [
+        "Add-Content"
+    ]
+    assert WRITING_COMMAND.findall(function) == [] and ">" not in function
+    assert (
+        'Add-Content -LiteralPath "$H\\notes\\timing.txt" -Value $block -Encoding UTF8'
+        " -ErrorAction Stop"
+    ) in lines
+    assert lines[-2:] == ['"appended to $H\\notes\\timing.txt"', "}"]
+    assert f"if (-not $session.ended_at) {{ '{NOT_TIMED}'; return }}" in lines
+    assert (
+        "if (-not $letter) { '" + NO_LETTER.replace("'", "''") + "'; return }"
+    ) in lines
+    assert not re.search(r"\b(?:uv|swreview|Invoke-\w+|Start-Process)\b", function)
+
+
+def test_step_4_1_writes_the_timed_reviews_figures_with_save_timing_note(plan: str) -> None:
+    """007 T083 (cycle 14): the plan has the engineer run `Save-TimingNote` where it had them copy
+    a timed review's figures into `notes\\timing.txt` by hand. Step 4.1, A's timed review, runs
+    it once, in a bullet of its own, once the review has ended - after the answers' turn, if it
+    asked questions, and before step 4.4 can send it anything - and on the stopped run's folder
+    too after a Retry; its opening says the command writes the start and end there, and that the
+    engineer notes none of the figures by hand; its Record line, what the commands do for
+    `Show-ReviewFacts` and `Show-SetupTime`, and step 4.11's Record line say the command writes
+    the durations there; what the commands do says what it writes, reads and prints; and rule 5,
+    which keeps any sitting's timed review (decision 197A), names it. No other step runs it."""
+    review = re.sub(r"\s+", " ", step(plan, "4.1"))
+    opening = review[: review.index("- 008 T103")]
+    timing = review[review.index("- The timing (rule 5): ") : review.index("- 007 T059, ")]
+    record_41 = review[review.index("Record: the facts") :]
+    rules = section(plan, "The rules for the whole sitting")
+    rule_5 = re.sub(r"\s+", " ", rules[rules.index("5. **In the findings document") :])
+    rule_5 = rule_5[: rule_5.index("6. **Do not")]
+    commands = re.sub(r"\s+", " ", section(plan, "Every PowerShell window: paste this first"))
+    calls = [
+        line.strip()
+        for block in POWERSHELL_BLOCK.findall(plan)
+        for line in block.splitlines()
+        if line.strip().startswith("Save-TimingNote ")
+    ]
+
+    assert calls == ["Save-TimingNote $run 'A'"]
+    assert [
+        block.strip()
+        for block in POWERSHELL_BLOCK.findall(step(plan, "4.1"))
+        if "Save-TimingNote" in block
+    ] == ["Save-TimingNote $run 'A'"]
+    assert review.index("- If the review asked questions, answer them all in one send") < (
+        review.index("- The timing (rule 5): ")
+    )
+    assert timing.startswith(
+        "- The timing (rule 5): once the review has ended, after the answers' turn if it asked"
+        " questions, and before step 4.4 can send it anything, write its figures in"
+        f" {TIMING_NOTE}: ```powershell Save-TimingNote $run 'A' ``` It prints `appended to` and"
+        " the note's path, and nothing else."
+    )
+    assert "After a Retry (box, item 6), run it on the stopped run's folder too." in timing
+    assert (
+        f"`Save-TimingNote` writes its start and end in {TIMING_NOTE}, beside A's minutes, which"
+        " you type (the 007 T060 bullet below), never in the findings document"
+    ) in opening
+    assert (
+        "You note none of them by hand: the timing bullet below writes them all once the review"
+        " has ended."
+    ) in opening
+    assert "Note the time it started and finished" not in plan
+    assert (
+        f"go in {TIMING_NOTE} only (rule 5; decision 196A), where `Save-TimingNote` wrote them;"
+    ) in record_41
+    assert (
+        f"`seconds from session.started to the first text.delta`, go in {TIMING_NOTE} only"
+        " (rule 5), where `Save-TimingNote` writes them."
+    ) in commands
+    assert (
+        f"on a timed review's folder, its line goes in {TIMING_NOTE} only (rule 5), where"
+        " `Save-TimingNote` writes it."
+    ) in commands
+    assert (
+        "- `Save-TimingNote '<run folder>' '<letter>'` writes a timed review's figures in"
+        f" {TIMING_NOTE} once the review has ended, so that you copy none of them by hand"
+        " (rule 5)"
+    ) in commands
+    assert (
+        "It reads only the run folder and the backend log, writes nothing but that note, never in"
+        " the run folder, calls no model, and prints only the note's path, never a figure."
+    ) in commands
+    assert (
+        "`Save-TimingNote` writes them there once the review has ended (step 4.1): its full"
+        " stamp, start and end times, runtime and every duration the plan's commands print for"
+        " it, so you copy none of them by hand; the six minutes and the update's minutes you"
+        " still type."
+    ) in rule_5
+    assert (
+        f"Step 4.1's `Save-TimingNote` has written those durations, and the folder's full stamp,"
+        f" in {TIMING_NOTE}: copy them nowhere."
+    ) in re.sub(r"\s+", " ", step(plan, "4.11"))
+
+
+# --- every path the setup block's helpers read or write (cycle 14's own findings) -----------------
+
+
+PATH_CMDLET = re.compile(
+    r"(?<![\w-])(Add-Content|Compress-Archive|Copy-Item|Export-Csv|Get-ChildItem|Get-Content|"
+    r"Get-Item|Import-Csv|Move-Item|Out-File|Push-Location|Remove-Item|Select-String|Set-Content|"
+    r"Set-Location|Split-Path|Test-Path|cd)\b([^|;\n)}]*)"
+)
+"""A call of a cmdlet that reads or writes a path, with its arguments up to a pipe, a semicolon,
+a closing bracket or the line's end. *Changed 2026-11-02 (the backlog's second item; 007 T085):*
+`Compress-Archive` and `cd`, `Set-Location`'s alias, too, which the plan's steps use; the setup
+block's helpers use neither."""
+
+
+def test_every_path_the_setup_blocks_helpers_read_or_write_is_literal(plan: str) -> None:
+    """Cycle 14's own findings (007 T085, 2026-11-02), read on every platform: Windows PowerShell
+    reads a path given by `-Path`, or by position, as a wildcard, so a `[` or `]` in it - a run
+    folder's name holds its document's name - reads another file or none, as `Show-SetupTime`
+    read `events.jsonl` (the bracketed cases of the first `Save-TimingNote` pin above). Every
+    helper of the setup block names each path it reads or writes by `-LiteralPath`; the two that
+    read the backend's logs by their names' pattern take the folder by `-LiteralPath` and the
+    pattern by `-Filter`, and pipe the files to `Select-String`. Two kinds of call name no path: a
+    `Select-String` fed by such a pipe, and `Split-Path $run -Leaf`, which only cuts the string
+    and which Windows PowerShell 5.1 refuses with `-LiteralPath`."""
+    [block] = POWERSHELL_BLOCK.findall(section(plan, "Every PowerShell window: paste this first"))
+    helpers = dict(re.findall(r"^function ([\w-]+) \{\n(.*?)^\}$", block, re.MULTILINE | re.DOTALL))
+    calls = [
+        (name, match[1], match[2].strip(), body[: match.start()].rstrip().endswith("|"))
+        for name, body in helpers.items()
+        for match in PATH_CMDLET.finditer(body)
+    ]
+
+    assert {
+        "Show-ReviewFacts", "Show-SetupTime", "Save-TimingNote", "Show-DrawingReadLog",
+        "Save-Fingerprint", "Compare-Fingerprint", "Show-RemodelLedger",
+    } <= set(helpers)
+    assert len(calls) >= 25
+    assert [
+        f"{name}: {cmdlet} {arguments}"
+        for name, cmdlet, arguments, piped in calls
+        if not arguments.startswith("-LiteralPath ")
+        and not (piped and cmdlet == "Select-String" and not re.search(r"-\w*Path\b", arguments))
+        and (cmdlet, arguments) != ("Split-Path", "$run -Leaf")
+    ] == []
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+def test_show_drawing_read_log_reads_the_tool_service_logs_in_a_folder_with_brackets(
+    plan: str, tmp_path: Path
+) -> None:
+    """Cycle 14's own findings (007 T085, 2026-11-02): `Show-DrawingReadLog` read the
+    tool-service logs by a `-Path` pattern, which reads a `[` or `]` in the folders above them as a
+    wildcard too, so a `%LOCALAPPDATA%` whose path held brackets printed nothing. It takes the
+    folder by `-LiteralPath` and the logs' name pattern by `-Filter`, and prints, as before, the
+    last three `command=drawing.read` lines of the tool-service logs, the newest last."""
+    local = tmp_path / "local [1]"
+    logs = local / "SwReview" / "logs"
+    logs.mkdir(parents=True)
+    read = [
+        f"[2026-11-01T10:0{minute}:00.0000000+00:00] id=r{minute} command=drawing.read status=ok"
+        " elapsed_ms=12 gated="
+        for minute in range(4)
+    ]
+    other = "[2026-11-01T10:00:30.0000000+00:00] id=x command=document.read status=ok"
+    (logs / "tool-service-20261101-100000.log").write_text(
+        f"{read[0]}\n{other}\n{read[1]}\n", encoding="utf-8"
+    )
+    (logs / "tool-service-20261101-100200.log").write_text(
+        f"{read[2]}\n{read[3]}\n", encoding="utf-8"
+    )
+    quoted = str(local).replace("'", "''")
+
+    lines = run_powershell(
+        f"$env:LOCALAPPDATA = '{quoted}'\n{plan_function(plan, 'Show-DrawingReadLog')}\n"
+        "Show-DrawingReadLog\n",
+        tmp_path,
+    )
+
+    assert lines == read[1:]
+
+
+# --- every path the plan's PowerShell builds from a run or check folder (the backlog's second
+# item, cycle 14) --------------------------------------------------------------------------------
+
+
+NO_DOCUMENT_NAME = {
+    "$H": "the handover folder, %LOCALAPPDATA%\\SwReview\\handover\\<date>",
+    "$findings": "the findings document in the handover folder, named by its date",
+    "$env:LOCALAPPDATA": "the account's local application data, in its profile",
+    "$env:APPDATA": "the account's roaming application data, in its profile",
+    "$env:TEMP": "the account's temporary folder, in its profile",
+    "$R": "the checkout: a bracket in its path fails the setup block's own check",
+    "<the smart_SW folder, as in the setup block>": "the checkout, as $R",
+    "<where the owner put the new file>": "the standards profile the owner hands over",
+    "$k": "a registry key",
+    "$wer": "a registry key",
+}
+"""Each name a command of the plan's PowerShell may still give by `-Path`, and why. None holds a
+document's name. The account's folders lie in its profile, named after the Windows account, whose
+name cannot hold `[` or `]`, and so does the handover folder, named by its date; the checkout is
+left as a note in `docs/review-backlog.md`, cycle 14 (007 T085, 2026-11-02)."""
+REFERENCE = re.compile(r"\$(?:env:\w+|_\.\w+|\w+)|<[^<>\n]+>")
+"""A name a command's arguments give: a variable (`$run`, `$env:APPDATA`, `$_.FullName`) or a
+placeholder (`<paste the run folder>`)."""
+
+
+def test_every_path_the_plans_powershell_builds_from_a_run_or_check_folder_is_literal(
+    plan: str,
+) -> None:
+    """Cycle 14's own findings, the backlog's second item (007 T085, 2026-11-02), read on every
+    platform: the pin above, carried from the setup block's helpers to all the plan's PowerShell,
+    its blocks and the commands written in its text. A run or check folder's name holds its
+    document's name, so a command that names one - `$run`, `$check` or any other name - reads it
+    by `-LiteralPath`: step 5.2 read `"$run\\report.md"` by `-Path` and, for a check folder whose
+    name holds brackets, printed `False`, the step's pass, without reading it. So does every
+    listing of the run root `$runs`, the folder the engineer types in the pane, which a bracket
+    left empty with no error. A command gives a path by `-Path` only when every name it gives is
+    in `NO_DOCUMENT_NAME`, each of which one does, or when it only cuts the string, as
+    `Split-Path $run -Leaf` does, which Windows PowerShell 5.1 refuses with `-LiteralPath`."""
+    blocks, written = (
+        [(match[1], match[2].strip()) for text in texts for match in PATH_CMDLET.finditer(text)]
+        for texts in (POWERSHELL_BLOCK.findall(plan), INLINE_CODE.findall(FENCED.sub("", plan)))
+    )
+    by_path = [
+        (f"{cmdlet} {arguments}", set(REFERENCE.findall(arguments)))
+        for cmdlet, arguments in blocks + written
+        if not arguments.startswith("-LiteralPath ")
+        and not (cmdlet == "Split-Path" and re.fullmatch(r"\$\w+ -(?:Leaf|Parent)", arguments))
+    ]
+
+    assert len(blocks) >= 100 and len(written) >= 5
+    assert [call for call, names in by_path if names - NO_DOCUMENT_NAME.keys()] == []
+    assert set().union(*(names for _, names in by_path)) == set(NO_DOCUMENT_NAME)
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+@pytest.mark.parametrize("name", [TIMED_RUN, BRACKETED_RUN])
+@pytest.mark.parametrize("says", [True, False])
+def test_step_5_2_reads_the_report_of_a_check_folder_whose_name_holds_brackets(
+    plan: str, tmp_path: Path, name: str, says: bool
+) -> None:
+    """Cycle 14's own findings, the backlog's second item (007 T085, 2026-11-02): step 5.2's last
+    line prints whether A-plate's drawing's `report.md` says no revision table was found, and
+    `False` is the step's pass. It read `"$run\\report.md"` by `-Path`, so for a `-standards`
+    folder whose name holds brackets, as its document's name may, it read no file and printed
+    `False` all the same. It prints `True` when the report says so, and `False` only when the
+    report it read does not, whatever the folder's name."""
+    [line] = [
+        line
+        for block in POWERSHELL_BLOCK.findall(step(plan, "5.2"))
+        for line in block.splitlines()
+        if "report.md" in line
+    ]
+    run = tmp_path / f"{name}-standards"
+    run.mkdir()
+    (run / "report.md").write_text(
+        "- no revision table was found on the 1 native sheet(s) of fictional plate that could be"
+        " enumerated\n" if says else "- a revision table on each native sheet\n",
+        encoding="utf-8",
+    )
+    quoted = str(run).replace("'", "''")
+
+    assert run_powershell(f"$run = '{quoted}'\n{line}\n", tmp_path) == [str(says)]
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+@pytest.mark.parametrize("root", ["runs", "runs [pilot]"])
+def test_step_5_3_finds_the_remodel_folder_under_a_run_root_whose_name_holds_brackets(
+    plan: str, tmp_path: Path, root: str
+) -> None:
+    """Cycle 14's own findings, the backlog's second item (007 T085, 2026-11-02): the run root is
+    the folder the engineer types in the pane, and the run root's rule lets its name hold
+    brackets. Step 5.3's copy check listed it by `-Path`, which read `[pilot]` as a wildcard and
+    found no folder, so it printed `no remodel folder`, with no error, beside the copy the tab had
+    made. By `-LiteralPath` it names the remodel folder and counts its copy; the pin above holds
+    the run root's other four listings, in steps 5.3, 6.2 and 6.3, to the same."""
+    [block] = [
+        block for block in POWERSHELL_BLOCK.findall(step(plan, "5.3")) if "copies in it" in block
+    ]
+    runs = tmp_path / root
+    (runs / "20261101-101112-fictional plate").mkdir(parents=True)
+    copy = runs / "20261101-101500-fictional plate-remodel" / "copy"
+    copy.mkdir(parents=True)
+    (copy / "fictional plate-RMS.SLDPRT").write_bytes(b"")
+    quoted = str(runs).replace("'", "''")
+
+    assert run_powershell(f"$runs = '{quoted}'\n{block}\n", tmp_path) == [
+        "remodel folder 20261101-101500 | copies in it: 1"
+    ]
