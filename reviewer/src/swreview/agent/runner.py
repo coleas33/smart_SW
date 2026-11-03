@@ -1425,6 +1425,11 @@ class ReviewRun:
         self._finalized: list[CoverageItem] = []
         # Whether `finalize` has run: only the first stamps a waiting `checked_at` (98A).
         self._finalized_once = False
+        self._writing = threading.RLock()
+        """Held from each save's snapshot of the session to the last view written from it
+        (`write_views`, `finalize`): the pane's decisions, minutes and Stop run on the thread
+        pool, and a save that waits out a reader (`atomic.write_atomic`) must not land over a
+        later one (002 cycle 25's Tier 2 review)."""
         self._coverage_stop = tools if isinstance(tools, CoverageStopTools) else None
         """Lever 7's wrapper when this run has it, `None` when it does not.
 
@@ -2259,12 +2264,13 @@ class ReviewRun:
             self.context, self.started, written=self._finalized, first=not self._finalized_once
         )
         self._finalized_once = True
-        ranking = rank(session)
-        # Before `save_session`, and recomputed from the whole ledger on every call, the
-        # same rule finalization itself follows: finalizing twice is finalizing once.
-        session.usage = self.usage_ledger.usage()
-        save_session(session, self.session_path)
-        write_attention_record(self.out_dir, ranking, session.session_id)
+        with self._writing:
+            ranking = rank(session)
+            # Before `save_session`, and recomputed from the whole ledger on every call, the
+            # same rule finalization itself follows: finalizing twice is finalizing once.
+            session.usage = self.usage_ledger.usage()
+            save_session(session, self.session_path)
+            write_attention_record(self.out_dir, ranking, session.session_id)
         ended_at = session.ended_at
         body: dict[str, Any] = {
             "ended_at": ended_at.isoformat() if ended_at is not None else None,
@@ -2292,25 +2298,31 @@ class ReviewRun:
         ranking or a view that would not write is logged and never raised, because the record
         is already on disk and losing a turn or a shutdown over its report is the wrong trade;
         without it, it raises, for a caller that answers the engineer's own write.
+
+        The run's writers take turns (`_writing`), so the record and views on disk are the
+        last writer's, from the newest session.
         """
-        if save:
-            save_session(self.session, self.session_path)
-        try:
-            ranking = rank(self.session)
-            report = render_report(
-                self.session,
-                self.context.ir,
-                ranking=ranking,
-                events=session_events(self.out_dir, self.session.session_id),
-            )
-            (self.out_dir / REPORT_FILE_NAME).write_text(report, encoding="utf-8")
-            write_attention_record(self.out_dir, ranking, self.session.session_id)
-        except Exception as exc:
-            if not best_effort:
-                raise
-            logging.getLogger(__name__).warning(
-                "rendering %s failed: %s", self.out_dir / REPORT_FILE_NAME, self.redact(str(exc))
-            )
+        with self._writing:
+            if save:
+                save_session(self.session, self.session_path)
+            try:
+                ranking = rank(self.session)
+                report = render_report(
+                    self.session,
+                    self.context.ir,
+                    ranking=ranking,
+                    events=session_events(self.out_dir, self.session.session_id),
+                )
+                (self.out_dir / REPORT_FILE_NAME).write_text(report, encoding="utf-8")
+                write_attention_record(self.out_dir, ranking, self.session.session_id)
+            except Exception as exc:
+                if not best_effort:
+                    raise
+                logging.getLogger(__name__).warning(
+                    "rendering %s failed: %s",
+                    self.out_dir / REPORT_FILE_NAME,
+                    self.redact(str(exc)),
+                )
 
     def release_bridge(self) -> None:
         """Close the live transport while retaining its client for a later request."""

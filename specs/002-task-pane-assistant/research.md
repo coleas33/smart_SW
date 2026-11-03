@@ -7758,7 +7758,9 @@ earlier review showed, so the date rested on recall.
     match holds each record for one read, about a millisecond. The add-in's session-head read has
     the same window: its `FileShare.Delete` lets `File.Replace` (`ReplaceFileW`), which its test
     uses, through, but not `os.replace`, as a probe on the development machine showed. The cure
-    for every reader is in `write_atomic`; for the owner.
+    for every reader is in `write_atomic`; for the owner. *Changed 2026-11-03 (cycle 25):* the
+    owner took that cure on 2026-11-03, from roadmap run 6's brief: `write_atomic` tries a
+    replace another handle refused again, for about 2 s (cycle 25, below).
 - **Tier 2 review** (T392; 2026-11-03): one must-fix and five should-fix, fixed test first where
   they lay in this cycle's change ([tasks.md](tasks.md), T392's sub-item), the rest in
   `docs/review-backlog.md`'s cycle 17 section:
@@ -8490,4 +8492,137 @@ both files are written, so a Retry that starts after `ended` cannot rotate the s
     both cycles' text, the lower cycle's first: 002's row is 397 / 7 / 0 at T405 and 400 / 4 / 0
     at the close, `server.py` and the two test modules are git's three-way merge of both cycles,
     and the backlog's line references follow the stacked tree. T408's sub-item of the stacking in
+    [tasks.md](tasks.md) names each meeting.
+
+### Cycle 25. A record is saved even while another reader holds it, on Windows (2026-11-03)
+
+The owner's pick on 2026-11-03 from roadmap run 6's brief
+([`docs/roadmap/README.md`](../../docs/roadmap/README.md#the-next-cycles-brief)): the cure cycle 17
+left for the owner (its *Left open*, the paragraph on `write_atomic`); Tier 2, no decision id.
+`write_atomic` replaces its target with `os.replace` (`MoveFileExW`), which Windows refuses while
+any other handle holds the target, whatever its share mode. A reader holds a record for about a
+millisecond - cycle 17's match reading earlier records, the add-in's session-head read, a console
+command - and a save in that instant failed.
+
+- **Settled**, the defaults taken inside the feature:
+  - **What is tried again.** A `PermissionError` whose `winerror` is 5, `ERROR_ACCESS_DENIED`,
+    which a reader of the target gives whatever its share mode, or 32, `ERROR_SHARING_VIOLATION`,
+    which a handle on the temporary gives unless it shares delete - a scanner's, say. A probe on
+    the development machine met 5 under Python's `open` and under every share mode `CreateFileW`
+    takes, from none to read, write and delete (the add-in's session-head read), and 32 with the
+    temporary held. Nothing else is tried again: any other error raises at once, as before, and
+    only Windows names a `winerror`, so nothing changes elsewhere.
+  - **How long.** Seven waits, 10, 20, 50, 100, 200, 500 and 1,000 ms (`REPLACE_WAITS_S`, 1.88 s
+    in all), each followed by a try: the first already outlasts a millisecond's read, and the
+    longer ones leave a slow reader room. Past the last, the last try's refusal raises as it is,
+    unwrapped, so each caller meets the error it met before, at most 1.88 s later.
+  - **The temporary** is written once and stays whole through every try; a failure removes it,
+    as before.
+  - **The callers**, each read: the session (`report/session.save_session`), the attention
+    record, the package merge (`ir/loader.py`), the engineering-context head and its history, the
+    engineering summary, the tokenizer's vocabulary, and the benchmark's records (its answer log,
+    pilot measurement, prompts record, provenance, run status, saved set, noise floor and packed
+    streams). None counts on a refusal coming at once: each passes it to its own caller as before.
+    The pane's backend writes off its event loop, its routes handing each write to a thread or a
+    chat's worker, so a wait holds no other request. Two hold something while they wait, and both
+    should still wait: the context store's `publish` keeps its publication lock, so a second
+    publisher meets `ContextStoreBusy` for up to 1.88 s more, as during any publish; and a backend
+    asked to stop finalizes its live reviews inside the add-in's 5 s grace
+    (`BackendProcess.StopGrace`), where a save still waiting at the kill is cut, as any save is.
+    *Corrected 2026-11-03 (the Tier 2 review, should-fix 3):* a wait does hold other requests.
+    The engineering-context routes share one lock, `EngineeringContextServer._lock`, a single
+    RLock for the backend, which `_mutate` holds across `publish` and its `write_atomic`: a
+    publish that waits holds up every context inspect, every other run's context write and every
+    review start that carries context (`_attachment_of`, `validate_prepared_review`) for up to
+    1.88 s, and a second publisher in the same backend waits on that lock; only another process's
+    meets `ContextStoreBusy`. A delay, never a lost write. Since the review, a run's saves and a
+    check folder's accepts take turns as well (below).
+- **Built** (2026-11-03; T410 and T411 in [tasks.md](tasks.md), Phase 40, the tests written first):
+  - `reviewer/src/swreview/atomic.py` (T411): `write_atomic` replaces through `_replace`, which
+    tries `os.replace` again after each of `REPLACE_WAITS_S` while it is refused with a
+    `PermissionError` whose `winerror` is in `HELD_ELSEWHERE`, and raises any other error, or the
+    last refusal, as it is.
+  - What the engineer sees: nothing new. A save - a decision, minutes, a review's end - that meets
+    a record another reader holds for a moment lands instead of failing; a real reader holding
+    the record 100 ms is waited out in about 0.18 s.
+  - Tests first (T410), in `reviewer/tests/unit/test_atomic.py`: six cases failed for want of the
+    retry - four stubbed ones, which met the first refusal raised at once or no wait at all, and
+    two real readers on Windows, Python's read and the add-in's session-head read, which met
+    `PermissionError` [WinError 5]. The guard, an error not another handle's tried once, passed
+    before and after; two mutants of its line failed it, the file restored byte for byte. No
+    existing test changed but the specs-README pin's 002 literal, on purpose (T409, T412).
+- **Left open**:
+  - A reader that holds a record past 1.88 s - an editor or a preview that keeps it open - still
+    fails the save, as before; and a target the replace can never take, a read-only file or a
+    folder, which Windows also answers with `ERROR_ACCESS_DENIED`, fails 1.88 s later than before.
+    *Changed 2026-11-03 (the Tier 2 review, should-fix 2):* a read-only file or a folder at the
+    target's name now raises at once; an access list that denies the write cannot be told from a
+    held file, and still fails 1.88 s later (`docs/review-backlog.md`, cycle 25).
+  - `benchmark/report_page.py`'s own replace of its staged `index.html` is not `write_atomic`'s,
+    and is unchanged.
+  - *Added 2026-11-03 (the Tier 2 review, should-fix 4):* a Retry's rotation moves `session.json`,
+    `attention.json` and the stream aside with a plain rename (`chat/server.py`,
+    `_rotate_previous`; a re-run's stream, `_rotate_kept`), which Windows refuses at once,
+    WinError 32, while a reader holds the file without sharing delete - any Python reader, cycle
+    17's match among them - so a Retry in that instant fails. Not `write_atomic`'s, so left
+    (`docs/review-backlog.md`, cycle 25).
+- **Tier 2 review** (T412; 2026-11-03): one must-fix and four should-fix, fixed test first where
+  they lay in the cycle's change ([tasks.md](tasks.md), T412's sub-item), the rest in
+  `docs/review-backlog.md`'s cycle 25 section:
+  - **A save that waited out a reader never lands over a later one** (the must-fix). The pane runs
+    a decision, minutes and Stop's close on the thread pool, an accept's re-run too, and nothing
+    ordered their saves: an earlier save that met a reader could land after a later one, and the
+    later decision, the review's end or the second exception was gone from the record while the
+    views showed it. `ReviewRun` now holds one lock, `_writing`, from each save's snapshot of the
+    session to the last view written from it - the whole of `write_views`, and `finalize`'s
+    ranking, usage, save and record - and an accept and the check's re-run run as one call under
+    one lock per check folder (`ChatServer._accept_and_recheck`).
+  - **The defaults taken.** The run's lock is reentrant, and `finalize`'s presentation pass stays
+    outside it, so no save waits on a model call. A folder's lock is made the first time an
+    accept reaches the folder and kept for the backend's life. A check run (`POST /checks/rms` or
+    `/checks/standards`) takes none: the host makes each check its own folder
+    (`RunFolders.CreateForCheck`, and `RunFolders.CreateForStandards` for a Standards check). A
+    target no wait lets through, a folder at its name or a file marked read-only, raises at once
+    (should-fix 2); an absent one, a first write whose temporary is held, is waited for as before.
+  - What the engineer sees: a decision, minutes or Stop pressed while an earlier save of the same
+    review waits out a reader waits for it, up to 1.88 s, before its own; a read-only record, or a
+    folder at its name, fails at once, as before cycle 25; one an access list denies still fails
+    1.88 s later. *Added 2026-11-03 (the read-only check):* a second Accept on the same check
+    folder waits for the first one's re-run, its wait for a reader included, before its own.
+  - **The rest fixed.** `test_atomic.py` records the writer's waits through its own `time`, so
+    another thread's sleep is neither recorded nor cut short, and its real reader test proves the
+    wait (should-fix 1); the callers' paragraph above is corrected (should-fix 3).
+  - *Added 2026-11-03:* a read-only check of these fixes, no must-fix and four should-fix, all four
+    taken, as T412's second dated sub-item records: the two lines above corrected - an access list
+    that denies the write still waits, and a Standards check's folder is
+    `RunFolders.CreateForStandards`'s - and the Accept's wait added; `test_chat_sessions.py`'s two
+    saves of a run now hold `attention.json` as well as `session.json`, and
+    `test_chat_checks_routes.py`'s two accepts the store's save as well as the re-run's, each
+    failing a mutant that takes the lock around the save alone or around the re-run alone; and
+    the refusals the tests build are in `tests/support/held_record.py` once.
+- **Gates** (T412; 2026-11-03), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required, on Python 3.12.3: 19,005 passed and 5
+    skipped, 9 of them this cycle's new cases; its two warnings are neither of this cycle's, and
+    none of its 51 tests that took 1.8 s or more waited on the writer, run again with a probe of
+    its waits.
+  - On Python 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the modules the change
+    touches and those that read the files it changed: 32 modules, 1,753 passed; the nine that read
+    these records, run again once the counts were written, 602 passed on each version.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed. No C# or page file changed, so
+    no C# gate ran.
+  - The link check over the cycle's four changed Markdown files, anchors included, 444 links and
+    none broken; every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or
+    live test ran.
+  - *Changed 2026-11-03:* that tree came before the Tier 2 review's fixes and the read-only
+    check's; their gates are T412's sub-items in [tasks.md](tasks.md).
+  - The whole suites on the final tree (`4358a7cc`, 2026-11-03): 19,081 passed and 5 skipped on
+    Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed; no C# or page
+    file changed (T412's line).
+  - *Done 2026-11-03, cycle 25 stacked on cycle 24:* the gates above ran on cycle 25 before it was
+    stacked on cycle 24 (Phase 39, T405 to T408, itself on cycles 23, 22 and 21 and feature 007's
+    cycle 20). The two met in eight files, none of them a words, C#, page or fixture file, and each
+    kept both cycles' text, the lower cycle's first: 002's row is 401 / 7 / 0 at T409 and
+    404 / 4 / 0 at the close, `runner.py` and `server.py` are git's three-way merge of both cycles,
+    and the backlog's line references follow the stacked tree. T412's sub-item of the stacking in
     [tasks.md](tasks.md) names each meeting.

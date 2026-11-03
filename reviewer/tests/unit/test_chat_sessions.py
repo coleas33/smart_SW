@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -41,9 +42,13 @@ from swreview.chat.sessions import (
     ChatState,
     InvalidTransitionError,
     record_disposition,
+    record_timing_live,
     replay_events,
 )
-from swreview.report.session import load_session
+from swreview.report.attention import rank
+from swreview.report.attention_record import ATTENTION_FILE_NAME, AttentionRecord
+from swreview.report.session import SESSION_FILE_NAME, load_session
+from tests.support.held_record import hold_the_first_save
 
 MODEL = "fake-1"
 
@@ -573,3 +578,108 @@ def test_the_disposition_event_body_matches_the_agent_event_model(
     assert event.type == "disposition"
     assert set(event.body) == {"finding_id", "disposition"}
     assert isinstance(UUID(str(run_with_a_finding.session.session_id)), UUID)
+
+
+# --- two saves of one run (002 cycle 25's Tier 2 review) -------------------------------
+
+SECOND_DRAWING_FINDING_ARGUMENTS: dict[str, Any] = {
+    **DRAWING_FINDING_ARGUMENTS,
+    "observed": "The counterbore is called out without its depth",
+    "requirement": "A counterbore callout states its depth",
+    "recommended_action": "Add the counterbore depth to the callout",
+}
+
+
+@pytest.fixture
+def run_with_two_findings(
+    chat: ChatSession, start_run: Callable[..., runner.ReviewRun]
+) -> runner.ReviewRun:
+    """A played session holding two findings, ready for two decisions."""
+    run = start_run(
+        [
+            turn(
+                "Two findings.",
+                call("record_drawing_finding", **DRAWING_FINDING_ARGUMENTS),
+                call("record_drawing_finding", **SECOND_DRAWING_FINDING_ARGUMENTS),
+            )
+        ],
+        callbacks=[chat.publish],
+    )
+    chat.attach(run)
+    run.start()
+    return run
+
+
+def _accept_the_first(run: runner.ReviewRun) -> None:
+    record_disposition(run, run.session.findings[0].id, decision="accepted", note="", by="FICT")
+
+
+def _accept_the_first_before_the_end(run: runner.ReviewRun) -> None:
+    """A decision on a review with no end yet, as a turn leaves it until its finalization
+    (`_run_turn`), so the close's is the one save that writes an end: two ends read from
+    one tick of the clock would make the two saves the same bytes."""
+    run.session.ended_at = None
+    _accept_the_first(run)
+
+
+def _reject_the_second(run: runner.ReviewRun) -> None:
+    record_disposition(run, run.session.findings[1].id, decision="rejected", note="", by="FICT")
+
+
+def _record_minutes(run: runner.ReviewRun) -> None:
+    record_timing_live(run, baseline=12.0)
+
+
+def _close(run: runner.ReviewRun) -> None:
+    run.finalize()
+
+
+@pytest.mark.parametrize("record", [SESSION_FILE_NAME, ATTENTION_FILE_NAME])
+@pytest.mark.parametrize(
+    ("earlier", "later"),
+    [
+        (_accept_the_first, _reject_the_second),
+        (_record_minutes, _reject_the_second),
+        (_accept_the_first_before_the_end, _close),
+    ],
+    ids=["a-decision-then-another", "minutes-then-a-decision", "a-decision-then-the-close"],
+)
+def test_a_save_that_waited_out_a_reader_never_lands_over_a_later_one(
+    run_with_two_findings: runner.ReviewRun,
+    monkeypatch: pytest.MonkeyPatch,
+    earlier: Callable[[runner.ReviewRun], None],
+    later: Callable[[runner.ReviewRun], None],
+    record: str,
+) -> None:
+    """002 cycle 25's Tier 2 review, its must-fix: the writer waits out a reader, so a save
+    that met one could land after a later save of the same run, and the engineer's later
+    decision, or the close's end, was gone from `session.json` while the views showed it.
+    The pane runs a decision, minutes and Stop's close on the thread pool, so two can meet:
+    here the earlier one's save meets a reader, the later one is made meanwhile, and the
+    record on disk is the newest - every save of a run takes its snapshot and lands in turn.
+
+    *Changed 2026-11-03 on purpose (002 T412, cycle 25's read-only check):* the reader holds
+    `attention.json` as well as `session.json`, and the record beside the session is asserted
+    too: a run's turn covers the views it writes as well as its save, or the earlier ranking
+    lands beside a session holding the later decision. Only the first pair's later act moves
+    the ranking - the two findings rank as one family row, which rejecting the second alone
+    leaves as it was, and the close ranks nothing new - so with `attention.json` held it is
+    the pair that fails when the views are written outside the turn."""
+    run = run_with_two_findings
+    met_the_reader = hold_the_first_save(monkeypatch, record)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        first = pool.submit(earlier, run)
+        assert met_the_reader.wait(5), "the earlier save meets the reader"
+        later(run)
+        first.result()
+
+    saved, held = load_session(run.session_path), run.session
+    assert [finding.disposition for finding in saved.findings] == [
+        finding.disposition for finding in held.findings
+    ], "every decision is on disk"
+    assert (saved.timing, saved.ended_at) == (held.timing, held.ended_at), "the minutes and end"
+    assert saved.model_dump(mode="json") == held.model_dump(mode="json"), "the newest save, whole"
+    assert (run.out_dir / ATTENTION_FILE_NAME).read_bytes() == (
+        AttentionRecord.of(rank(held), held.session_id).model_dump_json(indent=2) + "\n"
+    ).encode("utf-8"), "and the record beside it ranks the newest session"
