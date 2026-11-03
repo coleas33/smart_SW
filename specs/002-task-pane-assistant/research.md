@@ -8160,3 +8160,49 @@ ticked.
     twelve files, and each kept both cycles' text, the lower cycle's first; 002's row is 389 / 7 / 0
     at T397 and 392 / 4 / 0 at the close, and the pane fixtures regenerate byte-identical, so the
     sha256 pin stands. T400's sub-item of the stacking in [tasks.md](tasks.md) names each meeting.
+
+### Cycle 23. Refused presses stop telling the engineer to reload (2026-11-03)
+
+Cycle 15's left-open item (H-c-010, *Left open*, above), which the owner picked on 2026-11-03 from
+roadmap run 6's brief; Tier 2, no decision id. Every refusal the disposition route answered
+`409 IllegalTransition` - a different decision on an Accept or a Reject, a pass pressed again, and
+Defer again on a Defer that holds a triage - said to reload the review, and a reload draws the
+note box from the record, losing a note typed for the press.
+
+- **Settled**, the defaults taken inside the feature:
+  - **No way to change a decision.** No control on the page clears or changes one: an Accept and
+    a Reject are final (`report/dispositions.py`), Clear review clears the page alone, and only
+    the backend clears a decision, when a check's verdict changes under it (H-d-008, 194A). So a
+    different decision's sentence says the card cannot change it.
+  - **The classes.** A different decision on an Accept or a Reject stays `IllegalTransition`, the
+    record's plain `ValueError`: the card draws the decision recorded above its sentence (*The
+    record shown*, below), so one sentence, which takes no placeholder, serves both decisions.
+    Two refusals take a class of their own, a `ValueError` of the record, so the console names it
+    too, answered 409, not retryable: `DecisionAlreadyRecordedError` (`DecisionAlreadyRecorded`),
+    the decision recorded sent again with nothing new to record - a pass's Accept, Reject or Defer
+    pressed again with no triage, which cycle 15's Tier 2 review kept from `OutcomeNeeded`, and an
+    Accept or Reject that holds a triage pressed again with none, its triage let go; and
+    `AlreadyDeferredError` (`AlreadyDeferred`), Defer again, with a triage or none, on a Defer
+    that holds one. `IllegalTransition` stays the route's answer to any other refusal of the
+    record, none of which a press makes.
+  - **The words.** In `labels.errors`, among its keys: `IllegalTransition`, "That finding already
+    has a decision, and an Accept or a Reject is final. The one recorded stands and is shown again;
+    the card cannot change it."; `DecisionAlreadyRecorded`, "That decision is already recorded, so
+    nothing changed."; `AlreadyDeferred`, "That finding is already deferred, with its triage. When
+    you decide, Accept or Reject keeps that triage, or takes the one you pick."
+  - **The console.** `swreview disposition` prints its one line, the record's class and message,
+    which say what the page's sentence says in the record's terms, naming the finding and the
+    decision recorded, since the page's words name the card and its buttons. A different
+    decision's message is as before; the Defer's now says what a later accepted or rejected does
+    with its triage; a decision already recorded says that sending it again with no triage
+    changes nothing.
+  - **The record shown.** Each refusal of the record - `IllegalTransition`, `TriageAlreadyRecorded`,
+    `OutcomeNeeded`, `DecisionAlreadyRecorded` and `AlreadyDeferred` - names the finding's
+    disposition as the record holds it, `disposition` beside `error_class`, `message` and
+    `retryable`, as an evidence refusal names `request_id`. The page draws the card's record from
+    it - the record's sentence above the refusal, its triage pressed and the head's no-triage line -
+    and keeps it as the finding's, so a decision another client recorded after the card was drawn,
+    unseen once the stream closed at the session's end, is the one shown. A refusal without the
+    key - `TurnRunning`, or an older backend's - shows the record the page holds, as before.
+  - **The note box.** A refused press leaves it as typed, whatever the refusal (cycle 11's Tier 2
+    review), and the record drawn from a refusal never touches it.
