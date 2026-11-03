@@ -8476,3 +8476,10 @@ both files are written, so a Retry that starts after `ended` cannot rotate the s
   - The whole suites on the final tree: recorded once they run.
   - *Changed 2026-11-03:* the counts above came before the Tier 2 review's fixes and the read-only
     check's; their gates are T408's two sub-items in [tasks.md](tasks.md).
+  - *Done 2026-11-03, cycle 24 stacked on cycle 23:* the gates above ran on cycle 24 before it was
+    stacked on cycle 23 (Phase 38, T401 to T404, itself on cycles 22 and 21 and feature 007's cycle
+    20). The two met in twelve files, none of them a words, C#, page or fixture file, and each kept
+    both cycles' text, the lower cycle's first: 002's row is 397 / 7 / 0 at T405 and 400 / 4 / 0
+    at the close, `server.py` and the two test modules are git's three-way merge of both cycles,
+    and the backlog's line references follow the stacked tree. T408's sub-item of the stacking in
+    [tasks.md](tasks.md) names each meeting.
