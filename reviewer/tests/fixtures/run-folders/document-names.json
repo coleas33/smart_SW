@@ -1,0 +1,13 @@
+[
+  {"path": "C:\\FICT\\Designs\\cover-assy.SLDASM", "name": "cover-assy"},
+  {"path": "native/cover-assy.SLDASM", "name": "cover-assy"},
+  {"path": "C:\\FICT\\a:b*c?d.SLDPRT", "name": "a-b-c-d"},
+  {"path": "C:\\FICT\\ .-trimmed-. .SLDASM", "name": "trimmed"},
+  {"path": "C:\\FICT\\name.with.dots.SLDASM", "name": "name.with.dots"},
+  {"path": "C:\\FICT\\tab\there.SLDPRT", "name": "tab-here"},
+  {"path": "C:\\FICT\\xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.SLDASM", "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+  {"path": "C:\\FICT\\yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy z.SLDASM", "name": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"},
+  {"path": "C:\\FICT\\.SLDPRT", "name": "document"},
+  {"path": "", "name": "document"},
+  {"path": "C:\\FICT\\a\"<>|:*?\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001fz.SLDPRT", "name": "a---------------------------------------z"}
+]

@@ -9,16 +9,24 @@ whose record holds a flagged finding with the same subject key (`findings.findin
 Check again's carry matches, 015 `contracts/recheck.md` section 4). That review's folder date is
 named on the `finding` body as `first_shown`; both snapshots and `report.md` read it back from the
 stream; and the model is sent nothing of it. Every record here is fictional.
+
+*Changed 2026-11-03 (T392, the cycle's Tier 2 review):* the date is the day the record's review
+showed the finding, by the record's own clock, and the folder's older records are read too; an
+earlier finding gives none once a component it names is another part's here; the match reads
+oldest first, within a budget; and a review started unticked in another configuration counts.
 """
 
 from __future__ import annotations
 
+import itertools
 import json
+import re
 import shutil
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import pytest
 from starlette.testclient import TestClient
@@ -34,10 +42,14 @@ from swreview.report.first_shown import document_name, first_shown_dates
 from swreview.report.markdown import render_report
 from swreview.report.names import component_names
 from swreview.report.session import (
+    ORIGIN_MARKS_VERSION,
     SESSION_FILE_NAME,
+    InvestigationStep,
     ModelStatus,
     ReviewedDocument,
     ReviewSession,
+    StepMark,
+    load_session,
     save_session,
 )
 from swreview.report.snapshot import review_snapshot, root_document
@@ -92,11 +104,20 @@ def key(finding: Finding) -> SubjectKey:
 
 
 def record(
-    *findings: Finding, package: Any = PACKAGE, document: ReviewedDocument | None = None
+    *findings: Finding,
+    package: Any = PACKAGE,
+    document: ReviewedDocument | None = None,
+    started: datetime | None = None,
 ) -> ReviewSession:
     """An earlier review's record of `findings`. With `document`, a review started unticked,
-    whose record names its document and configuration (`model_status.document`)."""
+    whose record names its document and configuration (`model_status.document`).
+
+    *Changed 2026-11-03 (T392, the Tier 2 review's must-fix):* started at `started`, a local wall
+    clock, when it is given, since a record now dates its findings by its own clock rather than
+    its folder's name; otherwise now, as `new_session` starts one."""
     session = new_session(package).model_copy(update={"findings": list(findings)})
+    if started is not None:
+        session.started_at = started.astimezone(UTC)
     if document is not None:
         session.model_status = ModelStatus(
             state="not_sent", document=document, checked_at=datetime(2026, 9, 1, tzinfo=UTC)
@@ -105,10 +126,62 @@ def record(
 
 
 def earlier(root: Path, name: str, *findings: Finding, **options: Any) -> Path:
-    """A review folder `name` under `root`, holding the record of `findings`."""
+    """A review folder `name` under `root`, holding the record of `findings`.
+
+    *Changed 2026-11-03 (T392, the Tier 2 review's must-fix):* the record started when the name's
+    stamp says, as a review the add-in named that day did, unless `started` says otherwise; a name
+    with no stamp, which the match never opens, keeps now."""
     folder = root / name
+    options.setdefault("started", stamped(name))
     save_session(record(*findings, **options), folder / SESSION_FILE_NAME)
     return folder
+
+
+def stamped(name: str) -> datetime | None:
+    """The local wall clock a folder's name begins with, `yyyyMMdd-HHmmss`, or `None`."""
+    try:
+        return datetime.strptime(name[:15], "%Y%m%d-%H%M%S")
+    except ValueError:
+        return None
+
+
+WAITING: ReviewedDocument = {"path": "native/cover-assy.SLDASM", "configuration": "Default"}
+"""The document a review of `PACKAGE` started unticked names."""
+
+
+def step(index: int, mark: StepMark | None) -> InvestigationStep:
+    """A recorded call: the pre-run's or code's re-grade, by its `mark`, or the model's with
+    none."""
+    return InvestigationStep(
+        index=index,
+        tool="FICT_check",
+        arguments={},
+        result_summary="FICT",
+        status="ok",
+        error=None,
+        elapsed_s=0.0,
+        origin_mark=mark,
+    )
+
+
+PRERUN, TURN, REGRADE = step(0, "prerun"), step(1, None), step(2, "regrade")
+"""The pre-run's call, a call the model asked for in a turn, and code's re-grade after an answer."""
+
+
+def citing(finding: Finding, *steps: InvestigationStep) -> Finding:
+    """`finding` as `steps` recorded it, citing them by their indexes (`tool_result_ids`)."""
+    return finding.model_copy(update={"tool_result_ids": [one.index for one in steps]})
+
+
+def sent(session: ReviewSession, at: datetime, *steps: InvestigationStep) -> ReviewSession:
+    """`session`, a review started unticked, as its engineer sent it at `at`, a local wall clock,
+    with `steps` recorded and marked as every session `start_review` begins marks them."""
+    assert session.model_status is not None
+    session.model_status.state = "sent"
+    session.model_status.sent_at = at.astimezone()
+    session.steps = list(steps)
+    session.origin_marks = ORIGIN_MARKS_VERSION
+    return session
 
 
 def dates(root: Path, **options: Any) -> dict[SubjectKey, str]:
@@ -164,8 +237,13 @@ def test_the_earliest_review_that_raised_it_gives_the_date(tmp_path: Path) -> No
 
 def test_the_reviews_own_record_never_counts(tmp_path: Path, reads: list[Path]) -> None:
     """The review's own folder is never read: at a start it holds no record of this review, and a
-    record already there is not an earlier review's."""
+    record already there is not an earlier review's.
+
+    *Changed 2026-11-03 (T392, the Tier 2 review's must-fix):* nor is a record a Retry in the same
+    folder moved aside, `session.<n>.json`: it is this review's own failed attempt, where an
+    earlier folder's are read."""
     own = earlier(tmp_path, f"20260918-090000-{LABEL}", ON_ONE)
+    save_session(record(ON_TWO, started=datetime(2026, 9, 18, 8, 0)), own / "session.1.json")
 
     assert first_shown_dates(tmp_path, own, PACKAGE, before=BEFORE) == {}
     assert reads == []
@@ -173,15 +251,101 @@ def test_the_reviews_own_record_never_counts(tmp_path: Path, reads: list[Path]) 
 
 def test_a_check_agains_earlier_record_counts(tmp_path: Path, reads: list[Path]) -> None:
     """A Check again re-runs a waiting review in its own folder: the earlier record the re-run
-    holds counts, dated by the folder, and is not read again."""
+    holds counts, dated by the day it started, and is not read again.
+
+    *Changed 2026-11-03 (T392, the Tier 2 review's must-fix):* dated by its own start, which is
+    the folder's day here, not by the folder's name."""
     own = earlier(tmp_path, f"20260918-090000-{LABEL}", ON_ONE)
-    held = record(ON_ONE, ON_TWO)
+    held = record(ON_ONE, ON_TWO, started=datetime(2026, 9, 18, 9, 0))
 
     assert first_shown_dates(tmp_path, own, PACKAGE, before=BEFORE, earlier=held) == {
         key(ON_ONE): "2026-09-18",
         key(ON_TWO): "2026-09-18",
     }
     assert reads == []
+
+
+def test_a_send_after_a_restart_dates_what_its_turn_raised_by_the_day_it_was_sent(
+    tmp_path: Path,
+) -> None:
+    """The Tier 2 review's must-fix: Send on a waiting review restored after a restart re-runs it
+    in its folder, keeping the waiting record as `session.<n>.json` and replacing `session.json`
+    (015 `contracts/recheck.md` sections 1 and 4). A finding the re-run's turn raised after the
+    Send is dated by the day it was sent, not by the folder's name; one the waiting record showed
+    keeps that record's day, though the re-run's checks raised it again a week later."""
+    folder = earlier(tmp_path, f"20260918-100000-{LABEL}", ON_ONE, document=WAITING)
+    waiting = load_session(folder / SESSION_FILE_NAME)
+    (folder / SESSION_FILE_NAME).replace(folder / "session.1.json")
+    rerun = record(
+        citing(ON_ONE, PRERUN),
+        citing(ON_TWO, TURN),
+        document=WAITING,
+        started=datetime(2026, 9, 25, 10, 0),
+    )
+    assert rerun.model_status is not None
+    rerun.model_status.rechecked_from = waiting.session_id
+    sent(rerun, datetime(2026, 9, 25, 10, 5), PRERUN, TURN)
+    save_session(rerun, folder / SESSION_FILE_NAME)
+
+    assert dates(tmp_path) == {key(ON_ONE): "2026-09-18", key(ON_TWO): "2026-09-25"}
+
+
+@pytest.mark.parametrize(
+    ("finding", "day"),
+    [
+        (citing(ON_TWO, PRERUN), "2026-09-18"),
+        (make_finding(check="provenance.FICT_modified", component_ids=["cmp:0002"]), "2026-09-18"),
+        (
+            citing(ON_TWO, step(7, None)).model_copy(update={"carried_over_from": UUID(int=7)}),
+            "2026-09-18",
+        ),
+        (citing(ON_TWO, TURN), "2026-09-25"),
+        (ON_TWO, "2026-09-25"),
+        (citing(ON_TWO, REGRADE), "2026-09-25"),
+    ],
+    ids=[
+        "the pre-run's",
+        "a set-up record",
+        "carried from an earlier run",
+        "a call of the model's",
+        "a check the model set up",
+        "a re-grade after an answer",
+    ],
+)
+def test_a_send_on_a_later_day_dates_only_what_a_turn_raised_by_it(
+    tmp_path: Path, finding: Finding, day: str
+) -> None:
+    """The Tier 2 review's must-fix: a waiting review its engineer sent live a week after its
+    checks ran is one record. What the checks raised before any turn - the pre-run's, a set-up
+    record, a finding carried from an earlier run (`benchmark/origins.finding_origin`'s `prerun`,
+    `setup` and `carried`) - keeps the day the review started; what a turn raised after the Send
+    - a call of the model's, a check it set up, code's re-grade after an answer - takes the day
+    it was sent."""
+    session = record(finding, document=WAITING, started=datetime(2026, 9, 18, 9, 0))
+    sent(session, datetime(2026, 9, 25, 9, 0), PRERUN, TURN, REGRADE)
+    save_session(session, tmp_path / f"20260918-090000-{LABEL}" / SESSION_FILE_NAME)
+
+    assert dates(tmp_path) == {key(finding): day}
+
+
+def test_a_check_agains_earlier_records_are_each_dated_by_the_day_they_ran(
+    tmp_path: Path, reads: list[Path]
+) -> None:
+    """The Tier 2 review's must-fix: a Check again of a record that was itself a re-run holds that
+    record, dated by the day it ran, and reads the older one its folder keeps as
+    `session.<n>.json`, dated by its own: a finding the first showed keeps the first's day, and
+    one only the re-run raised takes the re-run's. The folder's `session.json`, the record held,
+    is not read again."""
+    own = earlier(tmp_path, f"20260918-090000-{LABEL}", ON_ONE)
+    (own / SESSION_FILE_NAME).replace(own / "session.1.json")
+    held = record(ON_ONE, ON_TWO, started=datetime(2026, 9, 25, 9, 0))
+    save_session(held, own / SESSION_FILE_NAME)
+
+    assert first_shown_dates(tmp_path, own, PACKAGE, before=BEFORE, earlier=held) == {
+        key(ON_ONE): "2026-09-18",
+        key(ON_TWO): "2026-09-25",
+    }
+    assert reads == [own / "session.1.json"]
 
 
 def test_an_unreadable_partial_or_empty_folder_is_skipped(tmp_path: Path) -> None:
@@ -209,17 +373,18 @@ def test_an_unreadable_partial_or_empty_folder_is_skipped(tmp_path: Path) -> Non
 
 def test_another_documents_reviews_are_ignored(tmp_path: Path, reads: list[Path]) -> None:
     """Another document's folder is never opened, by its name; a record of another document in a
-    folder of this one's name - its design, or the document or configuration a review started
-    unticked names - is read and ignored. The path is compared ignoring case and the
-    configuration exactly (`PageDocument.IsSameDocument`)."""
+    folder of this one's name - its design, or the document a review started unticked names - is
+    read and ignored. The path is compared ignoring case (`PageDocument.IsSameDocument`).
+
+    *Changed 2026-11-03 (T392, the Tier 2 review's should-fix 5):* a review started unticked in
+    another configuration is no longer another document's, so its case moved to
+    `test_a_review_in_another_configuration_counts_as_one_sent_at_once_always_has`: its findings
+    match by their own configuration, as a review sent at once's always have."""
     other = PACKAGE.model_copy(
         update={"design": PACKAGE.design.model_copy(update={"design_id": "dsn:FICT-other"})}
     )
-    path = "native/cover-assy.SLDASM"
     counted = [
         earlier(tmp_path, f"20260912-090000-{LABEL}", ON_ONE, package=other),
-        earlier(tmp_path, f"20260914-090000-{LABEL}", ON_ONE,
-                document={"path": path, "configuration": "FICT-other"}),
         earlier(tmp_path, f"20260915-090000-{LABEL}", ON_ONE,
                 document={"path": "native/FICT-other.SLDASM", "configuration": "Default"}),
         earlier(tmp_path, f"20260919-090000-{LABEL}", ON_ONE,
@@ -229,6 +394,63 @@ def test_another_documents_reviews_are_ignored(tmp_path: Path, reads: list[Path]
 
     assert dates(tmp_path) == {key(ON_ONE): "2026-09-19"}
     assert sorted(reads) == sorted(folder / SESSION_FILE_NAME for folder in counted)
+
+
+def test_a_review_in_another_configuration_counts_as_one_sent_at_once_always_has(
+    tmp_path: Path,
+) -> None:
+    """The Tier 2 review's should-fix 5, the default taken: however an earlier review of the
+    document was started, its findings match by each one's own configuration, the last part of
+    its subject key. A review started unticked in another configuration gives its date to a
+    finding raised in this review's configuration, as a review sent at once has always given it,
+    and a finding raised in the other configuration gives one only to a finding raised there."""
+    elsewhere = ON_TWO.model_copy(update={"configuration": "FICT-other"})
+    other: ReviewedDocument = {"path": "native/cover-assy.SLDASM", "configuration": "FICT-other"}
+    earlier(tmp_path, f"20260914-090000-{LABEL}", ON_ONE, elsewhere, document=other)
+    earlier(tmp_path, f"20260915-090000-{LABEL}", ON_ONE, elsewhere)
+
+    shown = dates(tmp_path)
+
+    assert shown == {key(ON_ONE): "2026-09-14", key(elsewhere): "2026-09-14"}
+    assert key(ON_TWO) not in shown
+
+
+def test_an_earlier_finding_on_another_part_under_the_same_number_gives_no_date(
+    tmp_path: Path,
+) -> None:
+    """The Tier 2 review's should-fix 1, the default taken: a component's id is its place in each
+    dump's numbering, so an earlier finding gives its date only while each component it names is,
+    in this review's package, an instance of a document the finding drew on (`provenance`). A
+    finding on another part, which an edit to the tree has since renumbered so that housing-1 has
+    its number, gives none; one on the housing does."""
+    bracket = ON_ONE.provenance[0].model_copy(
+        update={"document_id": "doc:FICT-bracket", "vault_path": "native/FICT-bracket.SLDPRT"}
+    )
+    moved = ON_ONE.model_copy(update={"provenance": [bracket]})
+    earlier(tmp_path, f"20260916-090000-{LABEL}", moved)
+    earlier(tmp_path, f"20260918-090000-{LABEL}", ON_ONE)
+
+    assert key(moved) == key(ON_ONE)
+    assert dates(tmp_path) == {key(ON_ONE): "2026-09-18"}
+
+
+def test_the_match_reads_the_oldest_reviews_first_and_stops_at_its_budget(
+    tmp_path: Path, reads: list[Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Tier 2 review's should-fix 2, the default taken: however many earlier reviews of the
+    document the seat keeps, the match spends at most `READ_BUDGET_S` opening them, oldest first,
+    so a review's start never waits on it longer; a finding only a review it did not reach showed
+    names no date, never a later one. Here each folder costs a second of a two-second budget."""
+    clock = itertools.count(0.0, 1.0)
+    monkeypatch.setattr(first_shown, "monotonic", lambda: next(clock), raising=False)
+    monkeypatch.setattr(first_shown, "READ_BUDGET_S", 2.0, raising=False)
+    newest = earlier(tmp_path, f"20260918-090000-{LABEL}", make_finding(check="FICT.check.new"))
+    middle = earlier(tmp_path, f"20260917-090000-{LABEL}", ON_ONE, ON_TWO)
+    oldest = earlier(tmp_path, f"20260916-090000-{LABEL}", ON_ONE)
+
+    assert dates(tmp_path) == {key(ON_ONE): "2026-09-16", key(ON_TWO): "2026-09-17"}
+    assert reads == [oldest / SESSION_FILE_NAME, middle / SESSION_FILE_NAME]
+    assert newest / SESSION_FILE_NAME not in reads
 
 
 def test_a_pass_neither_gets_nor_gives_a_date(tmp_path: Path) -> None:
@@ -257,26 +479,58 @@ def test_an_earlier_finding_later_withdrawn_gives_no_date(tmp_path: Path) -> Non
     assert dates(tmp_path) == {key(ON_TWO): "2026-09-18"}
 
 
+DOCUMENT_NAMES = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "run-folders" / "document-names.json"
+)
+"""`RunFolders.DocumentName`'s cases: one table, which the add-in's own test reads too
+(`RunFoldersNotSentTests.TheDocumentNameIsTheOneTheBackendFindsReviewsBy`), so the two rules
+cannot part."""
+
+ADD_IN = Path(__file__).resolve().parents[3] / "extractor" / "SwReview.AddIn"
+
+RUN_FOLDERS = ADD_IN / "Review" / "RunFolders.cs"
+"""The add-in's rules for a run folder's name, which `report/first_shown` copies."""
+
+
 @pytest.mark.parametrize(
     ("path", "name"),
-    [
-        ("C:\\FICT\\Designs\\cover-assy.SLDASM", "cover-assy"),
-        ("native/cover-assy.SLDASM", "cover-assy"),
-        ("C:\\FICT\\a:b*c?d.SLDPRT", "a-b-c-d"),
-        ("C:\\FICT\\ .-trimmed-. .SLDASM", "trimmed"),
-        ("C:\\FICT\\name.with.dots.SLDASM", "name.with.dots"),
-        ("C:\\FICT\\tab\there.SLDPRT", "tab-here"),
-        ("C:\\FICT\\" + "x" * 60 + ".SLDASM", "x" * 48),
-        ("C:\\FICT\\" + "y" * 47 + " z.SLDASM", "y" * 47),
-        ("C:\\FICT\\.SLDPRT", "document"),
-        ("", "document"),
-    ],
+    [(row["path"], row["name"]) for row in json.loads(DOCUMENT_NAMES.read_text(encoding="utf-8"))],
 )
 def test_a_documents_folder_name_is_the_add_ins(path: str, name: str) -> None:
     """`RunFolders.DocumentName`: the file name without its extension, each character Windows
     refuses in a file name a dash, spaces, periods and dashes trimmed from both ends, cut to 48
-    and trimmed again, and `document` when nothing is left."""
+    and trimmed again, and `document` when nothing is left.
+
+    *Changed 2026-11-03 (T392, the Tier 2 review's should-fix 4):* the cases are `DOCUMENT_NAMES`,
+    which the add-in's test reads too, with one more: every character Windows refuses in a file
+    name but the two separators."""
     assert document_name(path) == name
+
+
+def test_the_folder_rules_are_the_add_ins() -> None:
+    """The Tier 2 review's should-fix 4: what `report/first_shown` copies of `RunFolders.cs` is
+    pinned to it - the stamp's format (`TimestampFormat`), the name's budget (`MaxNameLength`)
+    and the suffixes `FindNotSentReview` skips - so a change there fails here, rather than
+    silently ending the dates or letting another run's folders in."""
+    source = RUN_FOLDERS.read_text(encoding="utf-8")
+
+    def constant(name: str) -> str:
+        found = re.search(rf'\b{name} = "?([^";]+)"?;', source)
+        assert found is not None, name
+        return found.group(1)
+
+    finder = source[source.index("SessionRecord? FindNotSentReview(") :]
+    finder = finder[: finder.index("ReadSessionHead(")]
+    skipped = re.findall(r"CarriesSuffix\(name, (\w+Suffix)\)", finder)
+
+    assert (constant("TimestampFormat"), first_shown.STAMP_FORMAT) == (
+        "yyyyMMdd-HHmmss",
+        "%Y%m%d-%H%M%S",
+    )
+    assert first_shown.STAMP.fullmatch(datetime(2026, 9, 18).strftime(first_shown.STAMP_FORMAT))
+    assert int(constant("MaxNameLength")) == first_shown.NAME_LENGTH
+    assert skipped == ["CheckSuffix", "StandardsSuffix", "RemodelSuffix"]
+    assert tuple(constant(name) for name in skipped) == first_shown.OTHER_RUNS
 
 
 def test_only_the_documents_review_folders_are_read(tmp_path: Path, reads: list[Path]) -> None:
@@ -405,6 +659,18 @@ def finding_bodies(folder: Path) -> list[dict[str, Any]]:
     return [event["body"] for event in chat.events_of(folder) if event["type"] == "finding"]
 
 
+def started_as_named(folder: Path) -> None:
+    """The record in `folder` started when the folder's name says, as a review the add-in named
+    that day did, though this one ran today: a record dates its findings by its own clock (T392,
+    the Tier 2 review's must-fix)."""
+    path = folder / SESSION_FILE_NAME
+    started = stamped(folder.name)
+    assert started is not None
+    session = load_session(path)
+    session.started_at = started.astimezone(UTC)
+    save_session(session, path)
+
+
 def without_date(body: dict[str, Any]) -> str:
     return json.dumps({name: value for name, value in body.items() if name != "first_shown"})
 
@@ -420,8 +686,12 @@ def test_a_second_review_names_the_first_ones_date_and_keeps_it_through_a_restar
     """Two pane reviews of the same document: each `finding` body of the second is the first's,
     byte for byte, with `first_shown` the first's date, which the first's bodies do not name;
     the second's `report.md` names it under each finding, and its live snapshot and its read-only
-    restore after a backend restart keep it."""
+    restore after a backend restart keep it.
+
+    *Changed 2026-11-03 (T392, the Tier 2 review's must-fix):* the first record is given the start
+    its folder's name says (`started_as_named`), since a record is now dated by its own clock."""
     pane_review(client, run_root / FIRST, tmp_package_dir)
+    started_as_named(run_root / FIRST)
     second = pane_review(client, run_root / SECOND, tmp_package_dir)
 
     before, after = finding_bodies(run_root / FIRST), finding_bodies(run_root / SECOND)
@@ -481,8 +751,12 @@ def test_the_date_adds_nothing_to_what_the_model_is_sent(
 ) -> None:
     """The date is the engineer's, for 188A's note, never the model's: a review whose findings an
     earlier review first showed sends the model every request byte for byte as the earlier one
-    did, two turns of them, and no request names the date."""
+    did, two turns of them, and no request names the date.
+
+    *Changed 2026-11-03 (T392, the Tier 2 review's must-fix):* the first record is given the start
+    its folder's name says (`started_as_named`), since a record is now dated by its own clock."""
     first = recorded_review(app, client, run_root / FIRST, tmp_package_dir)
+    started_as_named(run_root / FIRST)
     second = recorded_review(app, client, run_root / SECOND, tmp_package_dir)
 
     assert [body["first_shown"] for body in finding_bodies(run_root / SECOND)]
@@ -505,9 +779,14 @@ def test_a_check_again_names_its_earlier_records_date(
     models: chat.Models,
 ) -> None:
     """Check again after a restart (feature 015): the re-run's flagged findings that its earlier
-    record, in the same folder, raised flagged name that folder's date; the others name none."""
+    record, in the same folder, raised flagged name that folder's date; the others name none.
+
+    *Changed 2026-11-03 (T392, the Tier 2 review's must-fix):* the earlier record is given the
+    start its folder's name says (`started_as_named`), since a record is now dated by its own
+    clock: the folder's date here."""
     folder = run_root / "20260918-090000-FICT-7000"
     held = recheck.earlier_review(app, client, folder)
+    started_as_named(folder)
     document = root_document(load_package(folder).package)
     assert document is not None and document_name(document["path"]) == "FICT-7000"
     flagged = {key(finding) for finding in held.record.findings if finding.status != PASS.status}

@@ -16,7 +16,7 @@ machine as much as the code (`tests/conftest.py::pytest_ignore_collect`). Run it
 from __future__ import annotations
 
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -25,7 +25,7 @@ from swreview.findings import finding_subject_key
 from swreview.ir.loader import load_package
 from swreview.report.attention import SUPPRESSED_STATUS
 from swreview.report.first_shown import document_name, first_shown_dates
-from swreview.report.session import SESSION_FILE_NAME, load_session
+from swreview.report.session import SESSION_FILE_NAME, load_session, save_session
 from swreview.report.snapshot import root_document
 
 SOURCE = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "big-assembly"
@@ -38,15 +38,18 @@ BUDGET_S = 2.0
 
 @pytest.mark.perf
 def test_thirty_earlier_reviews_are_matched_inside_the_budget(tmp_path: Path) -> None:
+    """*Changed 2026-11-03 (T392, the Tier 2 review's must-fix):* each record starts when its
+    folder's name says, since a record is now dated by its own clock."""
     package = load_package(SOURCE).package
     document = root_document(package)
     assert document is not None
     label = document_name(document["path"])
+    session = load_session(SOURCE / SESSION_FILE_NAME)
     record = (SOURCE / SESSION_FILE_NAME).read_bytes()
     for day in range(1, EARLIER_REVIEWS + 1):
         folder = tmp_path / f"202609{day:02d}-090000-{label}"
-        folder.mkdir()
-        (folder / SESSION_FILE_NAME).write_bytes(record)
+        session.started_at = datetime(2026, 9, day, 9, 0).astimezone(UTC)
+        save_session(session, folder / SESSION_FILE_NAME)
         (tmp_path / f"202609{day:02d}-091500-{label}-check").mkdir()
     own = tmp_path / f"20261103-090000-{label}"
     own.mkdir()
