@@ -7871,3 +7871,73 @@ date, so a new problem read as old (`docs/review-backlog.md`, cycle 17).
     stays, asked of the components as this review numbers them, so an instance of the same path
     whose document is another - a part replaced by one of the same file name from another folder -
     still gives none.
+- **Built** (2026-11-03; T393 to T396 in [tasks.md](tasks.md), Phase 36, each test written first):
+  - The match (T395): `reviewer/src/swreview/report/first_shown.py` - `stable_names`, each
+    entity id of a package to its stable name; `_renumbered`, an earlier finding's key in this
+    review's numbering; `_dump`, an earlier folder's package read once, and only when one of its
+    records is of another dump; `_same_parts` asked of the renumbered components. The map keeps
+    its shape, keyed as this review numbers its subjects, so `ToolContext.finding_body`, the
+    stream, both snapshots, `report.md`, the page and the words read the date as before. Dated
+    notes on FR-031, `findings.finding_subject_key`, `ToolContext.first_shown`,
+    [contracts/README.md](contracts/README.md) and [data-model.md](data-model.md) section 2.
+  - What the engineer sees: after an edit that renumbers ids, a new problem on another instance
+    or entity has no "First shown in the review of ..." line, where it named the date of the
+    finding whose id it took; a finding whose id moved keeps its line, where it lost it. Across
+    two dumps a finding on a subject the dump names no stable way - a joint's hole instance, a
+    cosmetic thread - has none, where it named one; a record of this review's own dump, a Check
+    again's, keeps every line.
+  - The time (T395): on cycle 17's fictional run root of thirty earlier reviews of the
+    big-assembly replay fixture, `reviewer/tests/perf/test_first_shown_perf.py` (`-m perf`, budget
+    2 s), three runs each on the development machine with six other worktrees building beside
+    it: 0.36 to 0.38 s with every earlier record of this review's own dump, its ids matched as they
+    are, as before (0.35 to 0.37 s before the change); 1.39 to 1.48 s with each earlier review its
+    own dump, as on a seat - about 35 ms more an earlier review, its 1.55 MB package read and
+    validated once (about 20 ms of it on an idle run), its 996 stable names in under 1 ms. Every
+    flagged key of the fixture keeps its date: its findings name components and Hole Wizard
+    holes, each named once.
+  - Tests first: T394's twelve cases failed for want of the match by name and its two guards
+    passed, proved by mutants once it was built ([tasks.md](tasks.md), T394 and T395). Changed on
+    purpose, none loosened, each with a dated note: `test_first_shown.py`'s `dates` helper takes
+    the review's package; the perf test is timed with one dump and with a dump each; the 002
+    literal of the specs-README pin (T393, T396). Cycle 17's cases are unchanged: their records
+    are of the review's own dump.
+- **Left open**:
+  - An id the dump names no stable way gives no date across two dumps. A joint's and a tool
+    access finding name hole instances the joint map numbers by their faces' order
+    (`hol:0014#2`), and a thread pitch finding can name a cosmetic thread, whose feature name the
+    dump reads but does not keep; a face, a body, a mate, an interference, a note, a table and a
+    model annotation have none either, and a feature the tree lists twice - a sketch at the top
+    and under its feature - has two ids under one name. A date is lost there, never another's;
+    a stable name for each - an instance by its hole's name and place, a thread by its feature's
+    name kept in the dump - would give one; for the owner.
+  - A renamed instance or entity - a component, a feature, a view or a dimension renamed between
+    the two reviews - loses its date: its stable name is the name the dump gives it.
+  - Each earlier review now costs its package's read too, about 35 ms at the fixture's size, so
+    fewer fit the 2 s budget: past it, oldest first, a finding only a later review showed names no
+    date. A narrow read of the package's names would fit more; a design, as a narrow read of the
+    record is (`docs/review-backlog.md`, cycle 17).
+  - The route's caveat stands: a finding keyed by its place alone - a model drawing finding by
+    its sheet and view - shares its key with another on that place without any edit
+    (`test_an_earlier_finding_naming_no_component_keeps_its_date`), and a rules finding whose
+    subjects have no persistent reference tells them apart in prose the key does not hold.
+  - The PDF ingest's labels (`Sheet<n>`, `dim-<page>-<n>`, `note-<page>-<n>`) are positions too,
+    matched as names: the pane reviews only the add-in's native dumps, so none reaches the match,
+    and `swreview review` names no run root.
+- **Gates** (T396; 2026-11-03), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required, on Python 3.12.3: 19,010 passed and 5
+    skipped, 14 of them this cycle's new cases. Its two warnings are neither of this cycle: the
+    test client's deprecation, and a serializer warning from `test_ir_loader_append.py`'s
+    invalid row.
+  - On Python 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the modules the change
+    touches and those that read the files it changed: the 114 unit modules that read the code
+    changed, the goldens and the plan's pins, 5,960 passed and 1 skipped; then
+    `test_first_shown.py` and the plan's pins again after the last edit to the test module's
+    drawing helper, 364 passed, as on 3.12; `-m perf` on 3.11, 0.33 s and 1.43 s.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed; `-m perf`, the match's time
+    above.
+  - No C# or page file changed, so the C# build and its tests did not run for this cycle.
+  - The link check over the cycle's seven changed Markdown files, anchors included, 466 links
+    and none broken; every changed file LF in the index. No SOLIDWORKS process, seat task, or
+    paid or live test ran.
+  - The whole suites on the final tree: recorded once they run.

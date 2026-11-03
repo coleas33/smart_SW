@@ -780,26 +780,32 @@ def drawing(
     dimensions: list[str] | None = None,
     annotations: list[str] | None = None,
 ) -> DrawingRecord:
-    """The drawing's one sheet: a view for each of `views`, else `VIEW` alone, which holds a display
-    dimension for each of `dimensions` and an annotation for each of `annotations` - each named
-    so, and numbered from 1 in that order as the extractor numbers them."""
+    """The drawing's one sheet, `SHEET`: an empty view for each of `views`; or, with none named,
+    `VIEW` alone, holding a display dimension for each of `dimensions` and an annotation for each
+    of `annotations`. Each is named so and numbered from 1 in that order, as the extractor
+    numbers them."""
     sheet = "dsh:0001"
-    shown = [
-        DrawingView(
-            id=f"dvw:{number:04d}",
-            sheet_id=sheet,
-            name=name,
-            display_dimensions=[
-                DisplayDimensionRecord(id=f"ddm:{index:04d}", view_id=f"dvw:{number:04d}", name=one)
-                for index, one in enumerate(dimensions or [], start=1)
-            ],
-            annotations=[
-                DrawingAnnotation(id=f"dan:{index:04d}", owner_id=f"dvw:{number:04d}", name=one)
-                for index, one in enumerate(annotations or [], start=1)
-            ],
-        )
-        for number, name in enumerate(views or [VIEW], start=1)
-    ]
+    if views is not None:
+        shown = [
+            DrawingView(id=f"dvw:{number:04d}", sheet_id=sheet, name=name)
+            for number, name in enumerate(views, start=1)
+        ]
+    else:
+        shown = [
+            DrawingView(
+                id="dvw:0001",
+                sheet_id=sheet,
+                name=VIEW,
+                display_dimensions=[
+                    DisplayDimensionRecord(id=f"ddm:{number:04d}", view_id="dvw:0001", name=name)
+                    for number, name in enumerate(dimensions or [], start=1)
+                ],
+                annotations=[
+                    DrawingAnnotation(id=f"dan:{number:04d}", owner_id="dvw:0001", name=name)
+                    for number, name in enumerate(annotations or [], start=1)
+                ],
+            )
+        ]
     return DrawingRecord(
         document_id=DRAWING,
         sheets=[DrawingSheetRecord(id=sheet, name=SHEET, index=0, was_active=True, views=shown)],
