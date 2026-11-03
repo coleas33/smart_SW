@@ -8609,3 +8609,10 @@ command - and a save in that instant failed.
   - *Changed 2026-11-03:* that tree came before the Tier 2 review's fixes and the read-only
     check's; their gates are T412's sub-items in [tasks.md](tasks.md).
   - The whole suites on the final tree: recorded once they run.
+  - *Done 2026-11-03, cycle 25 stacked on cycle 24:* the gates above ran on cycle 25 before it was
+    stacked on cycle 24 (Phase 39, T405 to T408, itself on cycles 23, 22 and 21 and feature 007's
+    cycle 20). The two met in eight files, none of them a words, C#, page or fixture file, and each
+    kept both cycles' text, the lower cycle's first: 002's row is 401 / 7 / 0 at T409 and
+    404 / 4 / 0 at the close, `runner.py` and `server.py` are git's three-way merge of both cycles,
+    and the backlog's line references follow the stacked tree. T412's sub-item of the stacking in
+    [tasks.md](tasks.md) names each meeting.
