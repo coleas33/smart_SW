@@ -1462,7 +1462,9 @@ Defaults taken:
    type all six, zero for none. It says zero in a word, since no word of the form's two groups
    holds a digit (`test_the_minutes_forms_words_name_no_figure`, decision 186A), and changing that
    pin would loosen it. With no labels there is no form, and so no line (009 FR-030); labels that
-   name no such line draw the form without it.
+   name no such line draw the form without it. *Changed 2026-11-03 (the Tier 2 review, below):*
+   the line is "Type all six once you know them, zero for none. Each replaces what is recorded.",
+   since the form is blank over minutes already recorded, and a 0 typed there replaced one.
 3. The rest of the form is unchanged: the figures kept after Save or a refusal, the retry on
    `TurnRunning`, unsaved figures kept per review in page memory, and no form on a read-only
    restore.
@@ -1510,7 +1512,15 @@ mirroring the line. The seat plan's step 4.1. Dated notes in
 **Left open**:
 
 - On the page a correction retypes all six; the route and `swreview timing` still take one figure
-  alone (default 4).
+  alone (default 4). *Changed 2026-11-03 (the Tier 2 review, below):* the form is blank over the
+  six once recorded - back on the review, after a reload, or after a feature 015 re-run, which
+  carries all six into its new chat - so a correction retypes all six from the note, as the line
+  and the seat plan's step 4.1 now say.
+- *Added 2026-11-03 (the Tier 2 review, below):* a figure not known yet - setup or by hand, which
+  183A keeps unknown, and the net with it - cannot be left out of a save on the page, as it could
+  before this cycle. The line and step 4.1 say to save once all six are known, never 0 for one
+  not known; leaving one out takes the console, once the backend no longer holds the review (step
+  4.5, item 4).
 - M0-a's check of what the page wrote waits for M0's tables (197A), as H-a-015's route says.
 - The record still cannot tell a recorded 0 of supervision, verification or false alarms from
   their starting 0 (the backlog's cycle 1 item; R12, *Left open*). A save on the page no longer
@@ -1531,3 +1541,41 @@ mirroring the line. The seat plan's step 4.1. Dated notes in
   included, none broken. Every changed file LF in the index.
 - No SOLIDWORKS process, seat task, or paid or live test ran.
 - The whole suites on the final tree: recorded once they run.
+
+**The Tier 2 review** (T099; 2026-11-03). No must-fix; three should-fix, each fixed test first,
+and nothing left for the backlog. The gates above ran on the tree before these fixes.
+
+1. A 0 typed for none could replace a figure already recorded, or stand for one not known yet.
+   The form is blank over recorded minutes - after a switch back, a reload, or a feature 015
+   re-run, which carries all six into its new chat (`reviewer/src/swreview/agent/runner.py`) -
+   and each save replaces all six; a figure not known yet, which could be left blank before this
+   cycle, now takes a typed one, and the line suggested 0. Default taken: the line is "Type all
+   six once you know them, zero for none. Each replaces what is recorded.", and the seat plan's
+   step 4.1 says never to type 0 for a figure not known yet, and that a correction retypes all six
+   from the note; *Left open* names both. The all-six rule stands: it is H-a-015's route.
+2. A fact of its own pins Save off, and a press posting nothing, on a review shown again with a
+   field left blank after all six were typed on another.
+3. `resetTranscript` drew the form before `clearTiming` blanked its boxes, and while a failed
+   apply's review waited for the host's list nothing drew it again: the form stayed, Save on over
+   six blank fields, and a press posted six nulls. `clearTiming` now draws it at once (`app.js`).
+
+Tests: two new facts in `ReviewPageTimingTests.cs`,
+`SaveStaysOffOnAReviewShownAgainWithAFieldLeftBlank` and
+`TheFormGoesWhileAFailedApplyWaitsForItsReview`; changed on purpose, each with a dated note, none
+loosened, `test_review_words.py::test_the_minutes_forms_words_name_no_figure` (the line) and
+`test_workstation_test_plan.py::test_the_minutes_are_typed_on_the_review_page_and_the_console_is_the_fallback`
+(step 4.1's two sentences); `LabelsSample.cs` mirrors the line. Red first: the failed apply's
+fact, the form shown, while the class's 25 others passed, item 2's guard among them; and the two
+Python cases, while the two modules' 436 others passed. Item 2's guard was proved by a mutant of
+`app.js`, Save without its blank rule, which failed it and five other facts; the order the review
+named, the draft shown after `renderBinding`, left it green, since the snapshot's restore draws
+the form again and `clearTiming` now draws it blank. The file was restored byte for byte after
+each mutant, its sha256 checked. The pane fixtures' three generators moved the four that embed
+the labels by the one line, and `review-send-failure-events.json`'s pin moved with them. Checks
+on this tree: the C# Release build with zero warnings (`--no-incremental`), then every Review page
+class, `ErrorLabelsCoverTheHostTests` and `EngineeringContextPaneTests`, 509 passed; the 46
+Python modules that read the words, the labels, the pane fixtures, the plan and the handover, the
+identifier scan among them, 3,324 passed on Python 3.12.3 with the tokenizer required, and the two
+changed modules 438 on 3.11.16 (`--isolated`); `ruff check src tests` clean; the link check over
+the four Markdown files the fixes changed, 82 relative links, anchors included, none broken. No
+task was added, so 007 stays 94 / 5 / 0.
