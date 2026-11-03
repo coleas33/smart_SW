@@ -2347,7 +2347,9 @@ each is noted on the task lines it touches, no task box is ticked for it, and
     and a line the carry itself writes, for a verdict that changed, comes after it and is the one
     shown. Both snapshots, the page and `report.md` already read that event from the session's own
     stream, so none of them changes, and the line goes with the engineer's next decision, as any
-    cleared line does.
+    cleared line does. *Changed 2026-11-02 on cycle 12's Tier 1 review:* only onto a finding whose
+    status and severity are those of the earlier finding the line was written on (*Defaults taken*
+    below).
   - **The withdrawals.** A withdrawal with a decision takes its finding out of the earlier session,
     so the re-run holds no finding to name it on, and its id is the earlier record's, which the
     re-run may have given another finding. Written again as `finding.withdrawn`, it would drop that
@@ -2357,7 +2359,10 @@ each is noted on the task lines it touches, no task box is ticked for it, and
     with its `disposition` and `taken` (`snapshot.withdrawn_lines` of the earlier record, its own
     carried ones first), and `withdrawn_lines` names them before the session's own: `report.md`'s
     "Withdrawn with a decision" prints them worded as the earlier report did. The page ignores the
-    key; a fold's withdrawal still names nothing.
+    key; a fold's withdrawal still names nothing. *Changed 2026-11-02 on cycle 12's Tier 1 review:*
+    `snapshot.carried_withdrawals` reads them from the start, and `withdrawn_lines` is again the
+    session's own alone; `report.md` prints them first, each line ending " (earlier check run)",
+    the words file's `withdrawn.earlier`, since its id is that record's.
   - **Nothing to carry.** No line and no key are written, so the stream and `report.md` are what a
     Check again writes today, and the pane fixtures' re-run keeps its bytes.
   - **No page change.** After a Check again the page reads the new chat's snapshot through
@@ -2382,18 +2387,37 @@ each is noted on the task lines it touches, no task box is ticked for it, and
     [contracts/recheck.md](contracts/recheck.md) section 4, step 8.
   - Unchanged: `report/markdown.py`, `review_snapshot` and `restored_snapshot`, the server, the
     page and its C# tests.
+  - *Changed 2026-11-02 on cycle 12's Tier 1 review (T123):* `runner._carry_decisions` writes a
+    line only onto a finding at the status and severity of the earlier finding it was written on;
+    `carry_from`'s row begins with the items the earlier record's own `coverage.recheck` row
+    named (`runner._not_carried_before`), each item once; `snapshot.carried_withdrawals` reads the
+    start's withdrawals, `start_review` names those first and then `withdrawn_lines`', which is as
+    on `main`; and `report/markdown.py` prints the earlier ones first, each ending with the words
+    file's new `withdrawn.earlier`, with its row in 009
+    [data-model.md](../009-engineer-workspace/data-model.md) section 1.
 - **Defaults taken**, which the owner may revise:
   - A line goes only onto the one re-run finding with its subject key, as a decision does (72A);
     one with no such finding, or more than one, goes nowhere and is not named in
     `coverage.recheck`, since it holds no decision of the engineer's.
-  - A line goes onto its finding whatever the re-run's status and severity: it says a decision
-    was cleared, which stays true.
+  - *Changed 2026-11-02 on cycle 12's Tier 1 review:* a line goes onto its finding only when that
+    finding's status and severity are those of the earlier finding the line was written on.
+    Elsewhere (back at the verdict decided, say, when the answer that changed it was not carried)
+    its words, that this verdict changed, would not hold, so it goes nowhere and is not named, as
+    a line with no finding. It went onto its finding whatever the re-run's status and severity,
+    its words taken to stay true.
   - Two earlier lines that meet one re-run finding are both written, in the earlier session's
     order, and the last is shown; a decision carried onto that finding ends them, and a line the
     carry writes there itself comes after them.
   - The withdrawals are history, carried whatever the re-run raises: when the re-run raises the
     withdrawn finding again (an answer not carried, say), the report shows it undecided beside
-    the earlier withdrawal.
+    the earlier withdrawal - *since cycle 12's Tier 1 review* marked as the earlier check run's.
+  - *Added 2026-11-02 on cycle 12's Tier 1 review:* the mark is a trailing " (earlier check run)"
+    on each earlier line, not a sub-heading: the id it qualifies is on that line, the part stays
+    one list, and a report with no earlier withdrawal keeps its bytes.
+  - *Added 2026-11-02 on cycle 12's Tier 1 review:* a re-run of a re-run names again, first and in
+    their order, the items the earlier record's own `coverage.recheck` row named, read back from
+    its words, then its own; an item with the words of one before it is not repeated (a profile
+    changed before each, say).
 - **Tests changed on purpose**: none of before this cycle. T121's own helper `earlier_stream`
   takes the folder and writes the stream afresh (T122), for the case T122 added.
 - **Tests first**: T121's five cases failed before T122, each for want of the feature - the
@@ -2408,7 +2432,15 @@ each is noted on the task lines it touches, no task box is ticked for it, and
     undecided, is named nowhere (002 research, H-g-010's *Left open*): its line went with the
     finding, and its withdrawal took no decision, so a Check again has nothing of it to carry.
   - A line whose finding the re-run no longer raises, or raises more than once, goes nowhere (the
-    first default above).
+    first default above); *since cycle 12's Tier 1 review* so does one whose finding the re-run
+    raises at another verdict, and the decision it names is not restored, even when that finding
+    is back at the verdict decided ([`docs/review-backlog.md`](../../docs/review-backlog.md),
+    cycle 12).
+  - *Added 2026-11-02 on cycle 12's Tier 1 review:* in a chain of Check agains, the mark and the
+    `coverage.recheck` row say "earlier check run" of every earlier record, though each names its
+    own record's ids, and two records' items with the same words are named once; and the earlier
+    row is read back from its words, so a record whose row was written in other words passes
+    none of its items on (backlog, cycle 12).
   - A Check again's replayed Transcript does not show the earlier withdrawals; `report.md` names
     them (the Transcript after a restart is cycle 13's).
   - A Check again reads the earlier record's stream twice, at `session.started` and in the carry.
@@ -2425,3 +2457,21 @@ each is noted on the task lines it touches, no task box is ticked for it, and
     read there for its `type` enum and its `coverage.withdrawn` body, neither of which changed.
   - The link check over the cycle's seven changed Markdown files, anchors included, none broken;
     every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test ran.
+  - *Changed 2026-11-02:* these gates came before the Tier 1 review's fixes (*Review* below).
+- **Review** (Tier 1, decision 180A; 2026-11-02): one Opus review, no must-fix, and five should-fix
+  points, each taken as T123's dated sub-items in [tasks.md](tasks.md) record; the Codex review
+  runs on its own. Test first: a chain of Check agains lost the earlier record's "Not carried"
+  row, so a re-run's row begins with the earlier row's items, each once (point 1); a carried line
+  said its verdict changed where the re-run raised the finding at another verdict, so a line goes
+  only onto a finding at the verdict it was written on (point 5); and `report.md` printed the
+  earlier record's ids with nothing marking them, though they can name another finding of the
+  re-run, so each earlier withdrawal's line ends " (earlier check run)" (point 4). Two guard
+  tests, each proved by a mutant of `start_review`'s list: withdrawals carried across two Check
+  agains (point 2), and an earlier stream that ran ahead of its record (point 3). Tests changed on
+  purpose, none loosened, each with a dated note, all three this cycle's own:
+  `test_the_carrys_own_line_follows_a_carried_one_and_is_shown` (F-007 at F-001's verdict),
+  `test_a_re_run_names_the_earlier_withdrawals_first_under_an_id_it_numbers_again` (the mark) and
+  `test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_report_md` (the mark,
+  and point 2's second Check again). Left for later in
+  [`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 12: the three items *Left open*
+  above names.

@@ -331,6 +331,13 @@ model's opening, and the id maps a page would need to re-key its own work are no
    earlier record's withdrawals with a decision (`snapshot.withdrawn_lines`, those it carried
    itself first) as `carried_withdrawals`, which `report.md` names before the re-run's own. Every
    reader reads both from the re-run's own stream, and with neither nothing is written.
+   *Amended 2026-11-02 (cycle 12's Tier 1 review, T123):* a line is written only onto a finding
+   whose status and severity are those of the earlier finding it was written on; elsewhere its
+   words, that this verdict changed, would not hold, so it goes nowhere and is not named. The
+   withdrawals are read by `snapshot.carried_withdrawals` (those the earlier record carried
+   itself) and `snapshot.withdrawn_lines` (its own), in that order, and `report.md` ends each of
+   them with the words file's `withdrawn.earlier`, " (earlier check run)", since its id is the
+   earlier record's and can name another finding of the re-run.
 
 Nothing is carried by its number alone (FR-029). The carry ends with `_settle_waiting(applied)`,
 the step the waiting apply ends with too (owner decision 71A; `review-flow.md` section 4): the
@@ -393,6 +400,12 @@ decisions' items; their words are `words.md` section 4.
 severity changed is not named here: it has a card, and the card says so (section 4, step 2). Of
 187A's two items only the first stays, for a pass's triage recorded before 187A; the second, a
 finding no longer a pass, is a changed status, whose decision is not carried at all.
+
+*Amended 2026-11-02 (cycle 12's Tier 1 review, T123):* when the earlier record was itself a
+re-run, the list begins with the items its own `coverage.recheck` row named, in their order
+(`runner._not_carried_before`, which splits that row where they were joined, at each "; " outside
+parentheses): none of them reached that record, so none reaches this one, and a chain of Check
+agains keeps naming them. An item with the words of one before it is named once.
 
 ## 6. Failure
 
