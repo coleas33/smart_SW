@@ -16889,6 +16889,19 @@
     "first_shown": {
       "earlier": "First shown in the review of {date}."
     },
+    "timing": {
+      "baseline": "Baseline: a review of this design by hand, without SwReview",
+      "supervision": "Supervision: your time on the review while it ran",
+      "verification": "Verification: checking the findings judged right",
+      "false_alarms": "False alarms: the findings judged wrong",
+      "setup": "Setup: preparing and starting this review, any rerun included",
+      "by_hand": "By hand: checking what the review did not reach"
+    },
+    "timing_form": {
+      "heading": "Minutes for this review",
+      "save": "Save minutes",
+      "saved": "The minutes are recorded."
+    },
     "source": {
       "code": "Checked by code",
       "model": "AI guidance"

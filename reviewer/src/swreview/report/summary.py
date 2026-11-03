@@ -175,6 +175,11 @@ these rows and never classifies a part again."""
 
 EvidenceStatus = Literal["open", "answered"]
 ContactKind = Literal["zero_volume", "possible_only", "thread_model"]
+TimingInput = Literal["baseline", "supervision", "verification", "false_alarms", "setup", "by_hand"]
+"""The human timing inputs, `benchmark.timing.TIMING_INPUTS` in its order: the keys of the minutes
+form's words (feature 007, cycle 18). Copied rather than imported, because that module reaches the
+session module and through it the provider port (see the module docstring);
+`tests/unit/test_review_words.py` asserts the two are one list."""
 
 
 # --- the words file ---------------------------------------------------------------------------
@@ -446,6 +451,12 @@ class Labels(ReviewModel):
     first_shown: dict[Literal["earlier"], str]
     """What a card and `report.md` say of a finding an earlier review of the same document first
     showed, `{date}` that review's (roadmap hole H-a-009; 002 cycle 17)."""
+    timing: dict[TimingInput, str]
+    """The Review page's minutes form: the word for each human timing input, keyed by
+    `TIMING_INPUTS` in their order, one field per key, posted under it (feature 007, cycle 18)."""
+    timing_form: dict[Literal["heading", "save", "saved"], str]
+    """The minutes form's heading, its button and the one line a save leaves (feature 007, cycle
+    18)."""
     source: dict[Source, str]
     errors: dict[str, str]
 

@@ -125,6 +125,22 @@ words under the finding's heading.
 |---|---|
 | a finding card's head, when an earlier review first showed the finding | `first_shown` |
 
+*Amended 2026-11-03 (feature 007, cycle 18; its research R12):* the block gains `timing` and
+`timing_form`, after `note` and before `source`, the Review page's minutes form's words. `timing`
+holds the word for each human timing input, keyed by `benchmark.timing.TIMING_INPUTS` in their
+order: the page draws one field per key, in that order, labelled with its word, and posts each
+under its key to `POST /sessions/{chat_id}/timing`, so it holds no list of the inputs of its own.
+`timing_form` holds the form's `heading`, its button, `save`, and the one line a save leaves,
+`saved`. A refused save says its class's sentence from `errors` (`InvalidTiming`, "Enter the
+minutes as numbers, then save again.", among them), never the backend's message, which names a
+refused figure. With no labels, or a backend that names neither group, the page draws no form
+(FR-030).
+
+| Surface | Word from |
+|---|---|
+| the minutes form's heading, each field's label, its button and the line after a save | `timing`, `timing_form` |
+| the minutes form's line after a refused save | `errors` |
+
 ## 2. Titles
 
 *Amended 2026-09-23 by the owner (decision 2A, research R2.28).* A finding has two titles, and
