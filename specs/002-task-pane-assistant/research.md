@@ -8164,3 +8164,171 @@ ticked.
     twelve files, and each kept both cycles' text, the lower cycle's first; 002's row is 389 / 7 / 0
     at T397 and 392 / 4 / 0 at the close, and the pane fixtures regenerate byte-identical, so the
     sha256 pin stands. T400's sub-item of the stacking in [tasks.md](tasks.md) names each meeting.
+
+### Cycle 23. Refused presses stop telling the engineer to reload (2026-11-03)
+
+Cycle 15's left-open item (H-c-010, *Left open*, above), which the owner picked on 2026-11-03 from
+roadmap run 6's brief; Tier 2, no decision id. Every refusal the disposition route answered
+`409 IllegalTransition` - a different decision on an Accept or a Reject, a pass pressed again, and
+Defer again on a Defer that holds a triage - said to reload the review, and a reload draws the
+note box from the record, losing a note typed for the press.
+
+- **Settled**, the defaults taken inside the feature:
+  - **No way to change a decision.** No control on the page clears or changes one: an Accept and
+    a Reject are final (`report/dispositions.py`), Clear review clears the page alone, and only
+    the backend clears a decision, when a check's verdict changes under it (H-d-008, 194A). So a
+    different decision's sentence says the card cannot change it.
+  - **The classes.** A different decision on an Accept or a Reject stays `IllegalTransition`, the
+    record's plain `ValueError`: the card draws the decision recorded above its sentence (*The
+    record shown*, below), so one sentence, which takes no placeholder, serves both decisions.
+    Two refusals take a class of their own, a `ValueError` of the record, so the console names it
+    too, answered 409, not retryable: `DecisionAlreadyRecordedError` (`DecisionAlreadyRecorded`),
+    the decision recorded sent again with nothing new to record - a pass's Accept, Reject or Defer
+    pressed again with no triage, which cycle 15's Tier 2 review kept from `OutcomeNeeded`, and an
+    Accept or Reject that holds a triage pressed again with none, its triage let go; and
+    `AlreadyDeferredError` (`AlreadyDeferred`), Defer again, with a triage or none, on a Defer
+    that holds one. `IllegalTransition` stays the route's answer to any other refusal of the
+    record, none of which a press makes.
+  - **The words.** In `labels.errors`, among its keys: `IllegalTransition`, "That finding already
+    has a decision, and an Accept or a Reject is final. The one recorded stands and is shown again;
+    the card cannot change it."; `DecisionAlreadyRecorded`, "That decision is already recorded, so
+    nothing changed."; `AlreadyDeferred`, "That finding is already deferred, with its triage. When
+    you decide, Accept or Reject keeps that triage, or takes the one you pick." *Changed 2026-11-03
+    (the Tier 2 review):* `DecisionAlreadyRecorded`'s is "That decision is already recorded, so
+    nothing changed. An Accept or a Reject is final; a Defer still needs one of them when you
+    decide.": a pass's Defer recorded without a triage and pressed again with none meets it, and a
+    pass's card has no no-triage line to say what follows.
+  - **The console.** `swreview disposition` prints its one line, the record's class and message,
+    which say what the page's sentence says in the record's terms, naming the finding and the
+    decision recorded, since the page's words name the card and its buttons. A different
+    decision's message is as before; the Defer's now says what a later accepted or rejected does
+    with its triage; a decision already recorded says that sending it again with no triage
+    changes nothing. *Changed 2026-11-03 by the read-only check of the Tier 2 review's fixes
+    (below):* on a Defer - a pass's, the one Defer it meets - it also says that the finding can
+    still move to accepted or rejected, as the page's sentence says a Defer still needs one of
+    them.
+  - **The record shown.** Each refusal of the record - `IllegalTransition`, `TriageAlreadyRecorded`,
+    `OutcomeNeeded`, `DecisionAlreadyRecorded` and `AlreadyDeferred` - names the finding's
+    disposition as the record holds it, `disposition` beside `error_class`, `message` and
+    `retryable`, as an evidence refusal names `request_id`. The page draws the card's record from
+    it - the record's sentence above the refusal, its triage pressed and the head's no-triage line -
+    and keeps it as the finding's, so a decision another client recorded after the card was drawn,
+    unseen once the stream closed at the session's end, is the one shown. A refusal without the
+    key - `TurnRunning`, or an older backend's - shows the record the page holds, as before.
+    *Changed 2026-11-03 (the Tier 2 review):* each also carries the review's tally, `triage_tally`,
+    while some finding records a triage, as a reply does, and the page shows it with the record;
+    and the page draws both only while the card holds the record it held when that press was made.
+  - **The note box.** A refused press leaves it as typed, whatever the refusal (cycle 11's Tier 2
+    review), and the record drawn from a refusal never touches it.
+- **Built** (2026-11-03; T402 and T403 in [tasks.md](tasks.md), Phase 38, the tests written
+  first): `report/dispositions.py`'s `DecisionAlreadyRecordedError` and `AlreadyDeferredError`,
+  raised by `_validate_transition`; `chat/server.py`'s `DecisionAlreadyRecorded` and
+  `AlreadyDeferred`, and `DispositionRefusal`, the five refusals' class, whose body names
+  `disposition`, the route mapping each class of the record to its answer in one table
+  (`DISPOSITION_REFUSALS`); the words file's three sentences; and `ReviewPage/app.js`, whose
+  `call` keeps a refusal's `disposition` and whose refused press draws the card's record from it
+  through `showDisposition`, which then leaves the note box as typed. The pane fixtures that embed
+  the labels block, regenerated, with `review-send-failure-events.json`'s pin moved;
+  `LabelsSample.cs` mirroring the words; dated notes in
+  [contracts/chat-api.md](contracts/chat-api.md) (the disposition route and `GET /labels`), 001
+  [contracts/cli.md](../001-agentic-design-review/contracts/cli.md) and 009
+  [contracts/plain-words.md](../009-engineer-workspace/contracts/plain-words.md) section 1.
+  Changed on purpose, each with a dated note, none loosened: `test_triage.py`'s
+  `test_the_decision_recorded_sent_again_with_nothing_new_says_it_is_already_recorded` (renamed
+  from the pass test, three cases added),
+  `test_a_defer_holding_a_triage_is_refused_another_defer_naming_it` (its class and message, two
+  pass cases added) and `test_a_second_triage_or_another_decision_is_still_refused` (two cases
+  moved to those); `test_chat_server.py`'s
+  `test_a_pass_accepted_again_without_an_outcome_says_it_is_already_recorded` and
+  `test_a_defer_again_on_one_that_holds_a_triage_says_what_its_later_decision_does` (renamed),
+  `test_the_same_decision_again_without_an_outcome_is_a_409_of_its_own` and
+  `test_a_second_triage_is_a_409_of_its_own_and_writes_nothing` (an Accept or Reject sent again
+  with none); `test_cli.py`'s
+  `test_disposition_on_a_pass_decided_again_without_an_outcome_says_it_is_already_recorded`
+  (renamed); and the 002 literal of the specs-README pin (T401, T404).
+- **Left open**:
+  - A refusal names the record, but not the triage tally, which stays as the page last had it
+    until the next reply or event names it; and a decision another client records after the
+    stream closed is seen only when the engineer presses on that card. *Changed 2026-11-03 (the
+    Tier 2 review):* a refusal names the tally too; the rest stands.
+  - *Added 2026-11-03 (the Tier 2 review):* the page orders no reply, refusal or event against
+    another, so a refusal draws its record and tally only while the card holds the record it held
+    at its press. After the session's end, a decision another client records between two presses
+    on one card, the first press's reply or refusal landing after the second was made, is then not
+    shown until the next press; and a refusal on one card that lands after another card's later
+    reply shows the older tally, as two replies on two cards have since cycle 7
+    (`docs/review-backlog.md`, cycle 23). *Changed 2026-11-03 by the read-only check (below):* "or
+    refusal" added, since an earlier press's refusal redraws the record the guard compares too;
+    before the guard, the second press's refusal drew the other client's record there.
+  - Other refusals still say to reload where a reload is what shows the truth: `UnknownFinding`
+    (a finding the review no longer holds), `AlreadyAnswered`, `UnknownEvidenceRequest` and
+    `NotWaiting`. None is a decision the record refused.
+  - `IllegalTransition` stays the route's answer to a `ValueError` of the record that no class
+    names; no press makes one now.
+  - The captured pane fixture `review-waiting-apply-failure.json`, which has no generator, keeps
+    its capture's labels, the old `IllegalTransition` sentence among them, as it has since before
+    cycle 15.
+  - The hole's row in [`docs/roadmap/holes.md`](../../docs/roadmap/holes.md) is for the roadmap's
+    next update run.
+- **Tier 2 review** (T404; 2026-11-03): no must-fix and four should-fix, all fixed, test first
+  where behaviour changed ([tasks.md](tasks.md), T404's sub-item); the rest of the second is in
+  `docs/review-backlog.md`'s cycle 23 section.
+  - **The tally with the record** (should-fix 1). A refusal of the record redrew the card but not
+    the tally: after the session's end, an Accept recorded though its reply came back as the
+    proxy's `502 BackendUnavailable`, pressed again and refused, showed that Accept with the tally
+    still counting it not recorded. Each refusal of the record now carries `triage_tally` while
+    some finding records a triage, the reply's `with_triage_tally`, read with the disposition, and
+    the page shows it with the record.
+  - **Only over the record held at the press** (should-fix 2; the default taken). Each reply comes
+    back on a task of its own (`TaskPaneControl.ServePageResource`) and the events through the
+    `EventStreamPump`, so a later press's reply and event can land before an earlier press's
+    refusal, whose record, read before that later press was recorded, is then the older: a
+    `wrong` recorded went back to no triage on the card. A refusal now draws its record and tally
+    only while the card holds the record it held when that press was made; otherwise the card
+    keeps what it holds, its sentence above the refusal, as before this cycle. The review found
+    accepting the race reasonable if said; the guard costs a few lines, and its rest is *Left
+    open*.
+  - **What a Defer still needs** (should-fix 3; the default taken). `DecisionAlreadyRecorded`'s
+    sentence gained what can follow (*The words*): one sentence that serves every decision, as
+    `IllegalTransition`'s does, rather than a class of its own for a pass's Defer.
+  - **The claim narrowed** (should-fix 4). The disposition route's amendment in
+    [contracts/chat-api.md](contracts/chat-api.md), FR-031's in [spec.md](spec.md) and this
+    phase's *Checkpoint* in [tasks.md](tasks.md) said no refusal, or no refused decision, says to
+    reload; `404 UnknownFinding` still does (*Left open*). Each now says it of a refusal of the
+    record.
+  - *Added 2026-11-03:* a read-only check of these fixes, no must-fix and three should-fix, all
+    three done, as T404's second dated sub-item records. A pass's Defer refused as already
+    recorded now says, on the console and in the route's message, that it can still move to
+    accepted or rejected (*The console*). The guard's comment said that a record drawn since came
+    from a later write, but an earlier press's refusal redraws it too: the comment and *Left open*
+    now say so (the default taken: the records, not a guard that only a reply or an event moves,
+    which would show the other client's record there but let two refusals landing out of order
+    draw the older one, which this guard keeps from the card; each guard leaves one order, and
+    the revision the backlog names fixes both). And a fact pins that a refusal of the record with
+    no tally hides the tally.
+- **Gates** (T404; 2026-11-03), on the cycle's own tree:
+  - The whole non-live suite, the tokenizer required: 19,006 passed and 5 skipped on Python
+    3.12.3, its two warnings neither of this cycle: the test client's deprecation, and a
+    serializer warning from `test_ir_loader_append.py`'s invalid row. On Python 3.11.16
+    (`uv run --python 3.11 --isolated --all-extras`), the 86 modules the change touches or that
+    read the files it changed: 4,762 passed and 2 skipped.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed, again after the counts went in.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then 10,274
+    extractor and 4,381 add-in tests passed.
+  - The link check over the cycle's seven changed Markdown files, anchors included, none broken;
+    every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
+    ran.
+  - The whole suites on the final tree (`fc2ce6c9`, 2026-11-03): 19,043 passed and 5 skipped on
+    Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed; C# with zero
+    warnings, then 10,274 extractor and 4,411 add-in tests passed (T404's line).
+  - *Added 2026-11-03 (the Tier 2 review):* the review's fixes came after that tree; their gates
+    are T404's sub-item in [tasks.md](tasks.md).
+  - *Added 2026-11-03 (the read-only check):* its fixes came after that tree too; their gates are
+    T404's second sub-item.
+  - *Done 2026-11-03, cycle 23 stacked on cycle 22:* the gates above ran on cycle 23 before it was
+    stacked on cycle 22 (Phase 37, T397 to T400, itself on cycle 21 and feature 007's cycle 20). The
+    two met in eighteen files, five of them pane fixtures, and each kept both cycles' text, the
+    lower cycle's first; 002's row is 393 / 7 / 0 at T401 and 396 / 4 / 0 at the close, the pane
+    fixtures regenerate as git merged them, and the sha256 pin moved with them. T404's sub-item of
+    the stacking in [tasks.md](tasks.md) names each meeting.

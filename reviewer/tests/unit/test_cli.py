@@ -1415,14 +1415,40 @@ def test_disposition_says_to_pick_an_outcome_when_the_same_decision_comes_again_
     assert run_files(run_dir) == before
 
 
-def test_disposition_on_a_pass_decided_again_without_an_outcome_names_value_error(
-    run_dir: Path,
+@pytest.mark.parametrize(
+    ("decision", "line"),
+    [
+        (
+            "accepted",
+            "error: DecisionAlreadyRecordedError: finding F-001 is already accepted; 'accepted' "
+            "again with no triage changes nothing",
+        ),
+        (
+            "deferred",
+            "error: DecisionAlreadyRecordedError: finding F-001 is already deferred; 'deferred' "
+            "again with no triage changes nothing; it can still move to accepted or rejected",
+        ),
+    ],
+    ids=["accepted", "deferred"],
+)
+def test_disposition_on_a_pass_decided_again_without_an_outcome_says_it_is_already_recorded(
+    run_dir: Path, decision: str, line: str
 ) -> None:
     """Cycle 15's Tier 2 review: on a pass - 'Checked, no issue' - accepted with no triage, the
     same `--decision` again with none is reported as before H-c-010, exit 1 and one line on stderr
     naming `ValueError` and the terminal rule, not `OutcomeNeededError`, whose repair, an outcome,
     is a miss on a pass; nothing is written. The folder's one finding is made a pass in its
-    `session.json`."""
+    `session.json`.
+
+    *Changed 2026-11-03 on purpose (002 T402; cycle 23):* renamed from
+    `test_disposition_on_a_pass_decided_again_without_an_outcome_names_value_error`. The line names
+    the record's own class, `DecisionAlreadyRecordedError`, and says the decision is already
+    recorded, as the page's sentence for it does, where it named `ValueError` and the terminal
+    rule.
+
+    *Changed 2026-11-03 on purpose (002 T404; cycle 23's read-only check):* a pass deferred with no
+    triage, deferred again with none, added: its line also says that it can still move to
+    accepted or rejected, as the page's sentence says a Defer still needs one of them."""
     session = load_session(run_dir / "session.json")
     session.findings[0] = session.findings[0].model_copy(
         update={"status": "checked_within_scope", "severity": "info"}
@@ -1434,7 +1460,7 @@ def test_disposition_on_a_pass_decided_again_without_an_outcome_names_value_erro
             str(run_dir),
             "F-001",
             "--decision",
-            "accepted",
+            decision,
             "--by",
             "FICT-ENG",
             "--json",
@@ -1442,15 +1468,105 @@ def test_disposition_on_a_pass_decided_again_without_an_outcome_names_value_erro
     )
     before = run_files(run_dir)
 
+    again = invoke("disposition", str(run_dir), "F-001", "--decision", decision, "--by", "FICT-ENG")
+
+    assert again.exit_code == 1
+    assert again.stderr.splitlines() == [line]
+    assert run_files(run_dir) == before
+
+
+@pytest.mark.parametrize(
+    ("first", "then", "line"),
+    [
+        (
+            ("accepted", "wrong"),
+            ("rejected", "already_known"),
+            "error: ValueError: finding F-001 already has a terminal disposition ('accepted'); it "
+            "cannot be changed",
+        ),
+        (
+            ("accepted", "wrong"),
+            ("deferred", None),
+            "error: ValueError: finding F-001 already has a terminal disposition ('accepted'); it "
+            "cannot be changed",
+        ),
+        (
+            ("rejected", "wrong"),
+            ("rejected", None),
+            "error: DecisionAlreadyRecordedError: finding F-001 is already rejected with its "
+            "triage ('wrong'); 'rejected' again with no triage changes nothing",
+        ),
+        (
+            ("deferred", "wrong"),
+            ("deferred", None),
+            "error: AlreadyDeferredError: finding F-001 is deferred with its triage ('wrong'); it "
+            "can only move to accepted or rejected, not 'deferred' again, and either keeps that "
+            "triage unless it names another",
+        ),
+        (
+            ("deferred", "wrong"),
+            ("deferred", "already_known"),
+            "error: AlreadyDeferredError: finding F-001 is deferred with its triage ('wrong'); it "
+            "can only move to accepted or rejected, not 'deferred' again, and either keeps that "
+            "triage unless it names another",
+        ),
+    ],
+    ids=[
+        "another-decision",
+        "a-defer-after-an-accept",
+        "the-same-decision-with-its-triage-let-go",
+        "a-defer-again-holding-a-triage",
+        "a-defer-again-with-another-triage",
+    ],
+)
+def test_disposition_says_what_is_recorded_when_a_press_that_said_to_reload_is_refused(
+    run_dir: Path,
+    first: tuple[str, str],
+    then: tuple[str, str | None],
+    line: str,
+) -> None:
+    """002 T402 (cycle 23): each refusal whose sentence on the page said to reload the review is
+    reported as any refusal is - exit 1 and one line on stderr - its line naming the record's
+    class and saying what is recorded and what can follow, as the page's sentence does in the
+    card's words: a different decision on an Accept is final (`ValueError`, the terminal rule, as
+    before); the Reject recorded with a triage, sent again with none, is already recorded
+    (`DecisionAlreadyRecordedError`); and Defer again on a Defer that holds a triage, with none or
+    another, says what a later accepted or rejected does with it (`AlreadyDeferredError`). A
+    `--note` is sent each time, and nothing is written."""
+    decision, triage = first
+    payload(
+        invoke(
+            "disposition",
+            str(run_dir),
+            "F-001",
+            "--decision",
+            decision,
+            "--triage",
+            triage,
+            "--by",
+            "FICT-ENG",
+            "--json",
+        )
+    )
+    before = run_files(run_dir)
+    decision, triage = then
+    triaged = ["--triage", triage] if triage is not None else []
+
     again = invoke(
-        "disposition", str(run_dir), "F-001", "--decision", "accepted", "--by", "FICT-ENG"
+        "disposition",
+        str(run_dir),
+        "F-001",
+        "--decision",
+        decision,
+        *triaged,
+        "--note",
+        "FICT typed note",
+        "--by",
+        "FICT-ENG",
     )
 
     assert again.exit_code == 1
-    assert again.stderr.splitlines() == [
-        "error: ValueError: finding F-001 already has a terminal disposition ('accepted'); it "
-        "cannot be changed"
-    ]
+    assert again.stderr.splitlines() == [line]
     assert run_files(run_dir) == before
 
 

@@ -142,7 +142,7 @@ from swreview.checks.standards.run import (
 )
 from swreview.engineering_context.models import ContextArtifact
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewException
-from swreview.findings import TRIAGES
+from swreview.findings import TRIAGES, Finding
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
 from swreview.remodel.artifacts import grade_side_of
@@ -151,6 +151,8 @@ from swreview.report.attention_record import ATTENTION_FILE_NAME
 from swreview.report.dispositions import (
     DECISIONS,
     REPORT_FILE_NAME,
+    AlreadyDeferredError,
+    DecisionAlreadyRecordedError,
     OutcomeNeededError,
     TriageAlreadyRecordedError,
     TriageOnAPassError,
@@ -290,7 +292,9 @@ class InvalidTriage(ChatError):
     The route checks both before the chat's state, as the decision is: the record's own refusal
     is a `ValueError`, which the route answers as `IllegalTransition` (a second triage as
     `TriageAlreadyRecorded`, a flagged finding's press repeated without an outcome as
-    `OutcomeNeeded`, a triage a pass does not take as this class). One class for both,
+    `OutcomeNeeded`, the decision recorded sent again with nothing new as
+    `DecisionAlreadyRecorded`, Defer again on a Defer that holds a triage as `AlreadyDeferred`, a
+    triage a pass does not take as this class). One class for both,
     since both are a triage the finding does not take, answered alike, and the page sends neither:
     its pass card offers `wrong` alone.
     """
@@ -388,32 +392,85 @@ class SessionFailed(ChatError):
     error_class = "SessionFailed"
 
 
-class IllegalTransition(ChatError):
-    """A disposition the finding's state machine forbids (`report/dispositions.py`)."""
+class DispositionRefusal(ChatError):
+    """A decision the finding's record refuses (`report/dispositions.py`), whose body names the
+    finding's disposition as the record holds it, `disposition`, beside the contract's three keys
+    (002 cycle 23): the page draws the card's record from it, not from its own, which a decision
+    another client recorded may have overtaken once its stream closed. Only these bodies carry the
+    key, as only an evidence refusal's carries `request_id`.
+
+    *Changed 2026-11-03 (cycle 23's Tier 2 review):* the body also names the review's triage
+    tally, `triage_tally`, while some finding records a triage, as the 200 reply does
+    (`with_triage_tally`), read with the disposition, so the page shows the tally the record leaves
+    beside the record it draws."""
 
     status = 409
+
+    def __init__(
+        self, message: str, *, disposition: dict[str, Any] | None, findings: Sequence[Finding]
+    ) -> None:
+        super().__init__(message)
+        self.record = with_triage_tally({"disposition": disposition}, findings)
+
+    def body(self) -> dict[str, Any]:
+        return {**super().body(), **self.record}
+
+
+class IllegalTransition(DispositionRefusal):
+    """A different decision on an Accept or a Reject, which is final, and any other refusal of the
+    record the classes below do not name (`report/dispositions.py`). Its sentence says the
+    decision recorded stands and the card cannot change it, since nothing on the page clears or
+    changes a decision (002 cycle 23)."""
+
     error_class = "IllegalTransition"
 
 
-class TriageAlreadyRecorded(ChatError):
+class TriageAlreadyRecorded(DispositionRefusal):
     """A second triage on an Accept or Reject that holds one (roadmap hole H-g-012; 185A takes a
     triage once): the record's `TriageAlreadyRecordedError`. A class of its own because the page
     shows its class's sentence, and `IllegalTransition`'s reads as a refused decision where this
     one says the triage recorded stands."""
 
-    status = 409
     error_class = "TriageAlreadyRecorded"
 
 
-class OutcomeNeeded(ChatError):
+class OutcomeNeeded(DispositionRefusal):
     """The decision recorded without a triage, sent again with none (roadmap hole H-c-010), on a
     flagged finding: the record's `OutcomeNeededError`, the repair press a card's no-triage line
     names, made with no outcome picked. A class of its own because the page shows its class's
-    sentence, which says to pick an outcome first, where `IllegalTransition`'s says to reload the
+    sentence, which says to pick an outcome first, where `IllegalTransition`'s said to reload the
     review, and a reload draws the note box from the record, losing a note typed for the retry."""
 
-    status = 409
     error_class = "OutcomeNeeded"
+
+
+class DecisionAlreadyRecorded(DispositionRefusal):
+    """The decision recorded, sent again with nothing new to record (002 cycle 23): the record's
+    `DecisionAlreadyRecordedError` - a pass pressed again, or a decision that holds a triage
+    pressed again with its triage let go. A class of its own because the page shows its class's
+    sentence, which says the decision is already recorded, where `IllegalTransition`'s said to
+    reload the review, losing a note typed for the press."""
+
+    error_class = "DecisionAlreadyRecorded"
+
+
+class AlreadyDeferred(DispositionRefusal):
+    """Defer again on a Defer that holds a triage, with a triage or none (002 cycle 23): the
+    record's `AlreadyDeferredError`. A class of its own because the page shows its class's
+    sentence, which says what the later Accept or Reject does with that triage, where
+    `IllegalTransition`'s said to reload the review, losing a note typed for the press."""
+
+    error_class = "AlreadyDeferred"
+
+
+DISPOSITION_REFUSALS: dict[type[ValueError], type[DispositionRefusal]] = {
+    TriageAlreadyRecordedError: TriageAlreadyRecorded,
+    OutcomeNeededError: OutcomeNeeded,
+    DecisionAlreadyRecordedError: DecisionAlreadyRecorded,
+    AlreadyDeferredError: AlreadyDeferred,
+}
+"""The class the disposition route answers each of the record's own refusals with, by its exact
+class; any other `ValueError` of the record is `IllegalTransition`."""
 
 
 class ProviderFailed(ChatError):
@@ -1643,19 +1700,28 @@ class ChatServer:
             finding = await execute(chat, action) if execute else await run_in_threadpool(action)
         except KeyError as exc:
             raise UnknownFinding(f"no finding {finding_id!r} in this session") from exc
-        except TriageAlreadyRecordedError as exc:
-            raise TriageAlreadyRecorded(str(exc)) from exc
-        except OutcomeNeededError as exc:
-            raise OutcomeNeeded(str(exc)) from exc
         except TriageOnAPassError as exc:
             # The finding became a pass after `_refuse_a_pass_triage`: an answer graded it again.
             raise InvalidTriage(str(exc)) from exc
         except ValueError as exc:
-            raise IllegalTransition(str(exc)) from exc
+            refusal = DISPOSITION_REFUSALS.get(type(exc), IllegalTransition)
+            raise refusal(
+                str(exc), disposition=self._recorded(run, finding_id), findings=run.session.findings
+            ) from exc
         # The review's triage tally beside the finding, while one is recorded (002 cycle 7): after
         # the session's end the page's stream is closed, so the reply is what tells it.
         reply = with_triage_tally(finding.model_dump(mode="json"), run.session.findings)
         return JSONResponse(reply)
+
+    @staticmethod
+    def _recorded(run: ReviewRun, finding_id: str) -> dict[str, Any] | None:
+        """The finding's disposition as the record holds it, for a refusal's body (002 cycle 23):
+        read after the refusal, which changed nothing, from the session the run holds. None when
+        the finding holds none."""
+        for finding in run.session.findings:
+            if finding.id == finding_id and finding.disposition is not None:
+                return finding.disposition.model_dump(mode="json")
+        return None
 
     def _refuse_a_pass_triage(self, chat: ChatSession, finding_id: str, triage: Any) -> None:
         """Owner decision 187A: on a pass any triage but `wrong` is `400 InvalidTriage`, refused

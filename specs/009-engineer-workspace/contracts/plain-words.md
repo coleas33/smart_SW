@@ -151,6 +151,20 @@ of the two groups holds a digit. Labels that name no such line draw the form wit
 |---|---|
 | the line under the minutes form's heading | `timing_form` |
 
+*Amended 2026-11-03 (feature 002, cycle 23):* `errors` gains `DecisionAlreadyRecorded`'s sentence,
+"That decision is already recorded, so nothing changed. An Accept or a Reject is final; a Defer
+still needs one of them when you decide." (since cycle 23's Tier 2 review, naming what a Defer
+still needs: a pass's card says nothing of it), and `AlreadyDeferred`'s, "That finding is already
+deferred, with its triage. When you decide, Accept or Reject keeps that triage, or takes the one you
+pick.", for the classes the disposition route answers when the decision recorded is sent
+again with nothing new to record, a pass pressed again among them, and when Defer is sent again on a
+Defer that holds a triage (002 `contracts/chat-api.md`, the disposition route); and
+`IllegalTransition`'s, now a different decision's on an Accept or a Reject, says "That finding
+already has a decision, and an Accept or a Reject is final. The one recorded stands and is shown
+again; the card cannot change it." Each of those presses said to reload the review, and a reload
+draws the card's note box from the record, losing a note typed for the press. The card shows the
+record above each sentence, drawn from the refusal, which names it. `errors` stays last.
+
 ## 2. Titles
 
 *Amended 2026-09-23 by the owner (decision 2A, research R2.28).* A finding has two titles, and
