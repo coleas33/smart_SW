@@ -3287,7 +3287,11 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
     reader holds it built: 404 done, 4 open.
 
     *Changed 2026-11-03 on purpose (007 T100; cycle 26):* 007's row is recounted with cycle 26's
-    tasks, T100 to T103, T100 ticked: 95 done, 8 open."""
+    tasks, T100 to T103, T100 ticked: 95 done, 8 open.
+
+    *Changed 2026-11-03 on purpose (007 T103; cycle 26):* 007's row is recounted with T101 to T103
+    ticked, the update and registration scripts and the runbook reading the checkout literally
+    built: 98 done, 5 open."""
     readme = (REPO / "specs" / "README.md").read_text(encoding="utf-8")
     flat = re.sub(r"\s+", " ", readme)
     rows = {line[2:5]: line for line in readme.splitlines() if re.match(r"^\| \d{3} \|", line)}
@@ -3304,7 +3308,7 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
         assert "Closed on 2026-10-31 (decision 173A)" in rows[number], number
         assert closed in rows[number].split("Closed on 2026-10-31")[1], number
     assert "| 393 / 22 / 0 |" in rows["004"]
-    assert "| 95 / 8 / 0 |" in rows["007"]
+    assert "| 98 / 5 / 0 |" in rows["007"]
     assert "T180" not in rows["004"]
     for task in ("T182", "T187", "T303a", "T303b", "T353"):
         assert re.search(rf"\b{task}\b", rows["004"]), task
@@ -4870,9 +4874,10 @@ def test_the_runbook_finds_a_checkout_whose_path_holds_brackets(
     into the checkout by `cd '<repo>'` and named its console by `Set-Alias swreview-extract
     '<repo>\\...'`, each read as a wildcard, so beside a folder the checkout's brackets match the
     window went into that folder and the alias ran its console. Read literally - `cd
-    -LiteralPath`, and the alias's path escaped, as the plan's setup block reads them (the pin
-    above it) - they name the checkout itself; the pin above holds the runbook's other `cd`s to
-    the same."""
+    -LiteralPath`, and the alias's path escaped, as the plan's setup block reads them since cycle
+    19 - they name the checkout itself;
+    `test_every_read_of_the_checkout_in_the_scripts_and_the_runbook_is_literal` holds the
+    runbook's other two `cd`s to the same."""
     [quick] = POWERSHELL_BLOCK.findall(
         section(RUNBOOK.read_text(encoding="utf-8"), "9. Quick reference")
     )
