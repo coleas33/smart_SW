@@ -45,6 +45,7 @@ import pytest
 
 from swreview import atomic
 from swreview.atomic import write_atomic
+from tests.support.held_record import ACCESS_DENIED, SHARING_VIOLATION, _error
 
 REAL_REPLACE = os.replace
 
@@ -223,24 +224,11 @@ def test_a_missing_folder_is_an_error_and_is_not_made(tmp_path: Path) -> None:
 
 # --- a reader's moment is waited out ---------------------------------------------------
 
-ACCESS_DENIED = 5
-"""`ERROR_ACCESS_DENIED`: a replace over a target another handle holds, whatever its share."""
-SHARING_VIOLATION = 32
-"""`ERROR_SHARING_VIOLATION`: a replace from a temporary another handle holds."""
 PATH_NOT_FOUND = 3
 NETWORK_ACCESS_DENIED = 65
 FILE_SHARE_READ_WRITE_DELETE = 0x1 | 0x2 | 0x4
 """`FileShare.ReadWrite | FileShare.Delete`, as the add-in opens a session head
 (`RunFolders.OpenSessionHead`)."""
-
-
-def _error(kind: type[OSError], code: int, winerror: int | None) -> OSError:
-    """`kind` as Windows raises it, its `winerror` set by hand: only Windows sets one, so a
-    stub reads the same on every platform. `None` is another platform's error."""
-    error = kind(code, os.strerror(code))
-    if winerror is not None:
-        error.winerror = winerror
-    return error
 
 
 def _waits(monkeypatch: pytest.MonkeyPatch) -> list[float]:
