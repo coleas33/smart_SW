@@ -996,3 +996,66 @@ pin was red against 76 / 5 / 0 at T082 and against 77 / 8 / 0 at T085 before eac
   included, none broken. Every changed file LF in the index.
 - No C# or page file changed, so no C# gate. No SOLIDWORKS process, seat task, or paid or live
   test ran.
+
+*Changed 2026-11-02:* that tree came before cycle 14's own findings; the fixed tree's gates are
+the last part of this section.
+
+**Cycle 14's own findings** (review Tier 3, decision 180A: the gates and CI only, no review;
+2026-11-02, under T085).
+
+**Settled**, test first: a run folder whose name holds brackets got a wrong or missing setup
+line. A run folder's name holds its document's name, and Windows PowerShell reads a path given by
+`-Path`, or by position, as a wildcard, `[2]` being the one character `2`. `Show-SetupTime` read
+`"$run\events.jsonl"` so: for `fictional plate [2]` it read no file, printing an error and no
+setup line, or, beside a folder `fictional plate 2`, it read that folder's `events.jsonl` and
+timed another review's setup; and `Save-TimingNote` wrote the line it printed. Every path the
+setup block's helpers read or write now takes `-LiteralPath`, each helper checked:
+
+- `Show-SetupTime`'s `events.jsonl`;
+- the logs folder `Show-SetupTime` and `Show-DrawingReadLog` read: `Get-ChildItem -LiteralPath`
+  takes the folder and `-Filter` the logs' name pattern, and pipes the files to `Select-String`,
+  the same files in the same order as the `-Path` pattern read;
+- `Push-Location` into `$R\reviewer`, in the six helpers that run `uv`;
+- `Save-Fingerprint`'s `notes\paths.txt`, dumps folder and CSV, and `Compare-Fingerprint`'s two
+  CSVs.
+
+`Save-TimingNote`, `Show-FindingsByType` and `Get-SeatHash` already read literally.
+`Split-Path $run -Leaf` stays: it only cuts the string, and Windows PowerShell 5.1 takes no
+`-Leaf` with `-LiteralPath`.
+
+- Tests changed on purpose, this cycle's own, with a dated note, not loosened:
+  `test_save_timing_note_appends_a_timed_reviews_figures_and_prints_only_where_it_wrote` runs on
+  four folders, through the `plan_function` harness: the plain name; a name with brackets, alone
+  and beside a folder the brackets match, whose review started 30 s later; and the plain name
+  with the backend logs in a folder whose name holds brackets. `timed_run` takes the folder's
+  name.
+- New: `test_every_path_the_setup_blocks_helpers_read_or_write_is_literal`, read on every
+  platform - every call in the helpers that reads or writes a path names it by `-LiteralPath`,
+  but a `Select-String` fed by a pipe and `Split-Path $run -Leaf` - and
+  `test_show_drawing_read_log_reads_the_tool_service_logs_in_a_folder_with_brackets`.
+- Tests first: red, each for the finding's reason, while the plain case passed. Alone, no
+  `events.jsonl` and an error; beside the match, a setup of 30.0 s, the other folder's; under the
+  bracketed logs folder, `no POST /sessions 201 line after session.started`; the static pin
+  listing 14 calls - `Push-Location` in six helpers, `Show-SetupTime`'s two reads,
+  `Show-DrawingReadLog`'s, and `Save-Fingerprint`'s and `Compare-Fingerprint`'s five;
+  `Show-DrawingReadLog` printing nothing. Green after the fix, with no other test changed.
+
+**Left open**, in [`docs/review-backlog.md`](../../docs/review-backlog.md) under cycle 14:
+
+- `Show-SetupTime` takes the first `POST /sessions` 201 in the backend logs at or after the run's
+  `session.started`. If the timed review's own post was refused, that 201 is another review's
+  answer, and `Save-TimingNote` writes the line it gives.
+- The commands outside the setup block's helpers still pass a run folder, the run root or the
+  checkout by `-Path`. Step 5.2's `Select-String` on a check folder's `report.md` prints `False`,
+  its pass, for a folder whose name holds brackets, without reading the report; the run-root
+  listings of steps 5.3, 6.2 and 6.3 and the block's own `Set-Location $R` read a bracket as a
+  wildcard too.
+
+**Gates** (2026-11-02), on the fixed tree:
+
+- Python 3.12.3, the tokenizer required, over the seven modules above: 500 passed, none skipped.
+- `ruff check src tests` clean.
+- The link check over the cycle's six changed Markdown files, `docs/review-backlog.md` among
+  them: 116 relative links, anchors included, none broken. Every changed file LF in the index.
+- No C# or page file changed, so no C# gate. No SOLIDWORKS process, seat task, or paid or live
+  test ran.
