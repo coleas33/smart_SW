@@ -202,6 +202,9 @@ public sealed class ReviewPageTriageTests
     /// A finding the stream sends already decided - a re-run's restate (58A) - is drawn with its
     /// triage pressed; and a `disposition` event replaces whatever was picked on the card with what
     /// the backend recorded, whoever recorded it.
+    ///
+    /// *Changed 2026-11-02 on purpose (002 T368; cycle 11's Tier 2 review, a guard):* and the event
+    /// fills F-001's note box with the note recorded (owner decision 198A), which no fact read.
     /// </summary>
     [Fact]
     public void ATriageFromTheStreamIsShownPressed()
@@ -223,6 +226,7 @@ public sealed class ReviewPageTriageTests
             Assert.Equal(
                 "Disposition: accepted (" + Word("not_worth_flagging") + ") by " + Engineer + " at " + RecordedAt + " - FICT intended",
                 first.GetProperty("status").GetString());
+            Assert.Equal("FICT intended", await NoteBox(driver, "F-001"));
 
             JsonElement second = await driver.Read(ReadCard("F-002"));
             Assert.Equal(new[] { "new_and_real" }, Pressed(second));
@@ -253,6 +257,9 @@ public sealed class ReviewPageTriageTests
     /// <summary>
     /// A review restored read-only from its run folder shows each recorded triage pressed, and every
     /// triage button is off with the decisions and the note boxes (contracts/sessions.md section 5).
+    ///
+    /// *Changed 2026-11-02 on purpose (002 T368; cycle 11's Tier 2 review, a guard):* and F-100's
+    /// note box holds the note recorded (owner decision 198A), which no fact read on a restore.
     /// </summary>
     [Fact]
     public void ARestoredReviewLocksItsTriageButtons()
@@ -280,6 +287,7 @@ public sealed class ReviewPageTriageTests
                 Assert.Equal(
                     "Disposition: accepted (" + Word("already_known") + ") by " + Engineer + " at " + RecordedAt + " - FICT intended",
                     decided.GetProperty("status").GetString());
+                Assert.Equal("FICT intended", await NoteBox(driver, "F-100"));
             });
     }
 
