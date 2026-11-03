@@ -1430,4 +1430,7 @@ checkout into `C:\smart_SW` or the account's profile, whose paths hold no bracke
   `cd -LiteralPath`: the one read of the checkout cycle 18 added or reworded. 007 is 87 / 8 / 0 at
   T092 and 90 / 5 / 0 at T095. On the stacked tree the seven seat modules gave the counts recorded
   before it at each step. T095's sub-item of the stacking in [tasks.md](tasks.md) names each
-  meeting. The whole suites on the stacked tree are recorded next, as T095's last sub-item.
+  meeting. The whole suites on the stacked tree ran, and T095's last sub-item records them.
+- *Done 2026-11-03:* the whole suites on the stacked tree (`6e6ba35d`): 18,996 passed and 5
+  skipped on Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed. No
+  C# or page file changed (T095's last sub-item).
