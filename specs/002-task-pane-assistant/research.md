@@ -7338,11 +7338,23 @@ the decision register now records 160A as done.
     fails lets the snapshot through.
   - Only the two restore reads wait: a Review pressed before a reload's labels read answers, and a
     Check again's snapshot (`showRechecked`), which Send reaches from a review already drawn, do not.
-  - A re-run announced under its own id is counted not recorded until its fold, as its card is
-    shown until then; the fold's announcement counts what the fold left. So mid-turn the tally
-    counts "not recorded" one too many for each re-run of a check whose finding already has a
-    triage. The owner's call; the review left it for later
-    ([`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 13).
+  - A re-run announced under its own id is counted beside the finding it re-judges until its fold,
+    as both cards are shown until then; the fold makes them one, and its announcement counts what
+    it left. So mid-turn, while some finding records a triage, the tally counts one too many for
+    each re-run: the re-run's card, when the fold keeps the earlier decision, and the earlier
+    finding, when the fold clears its decision or it had none - each where it stands, a flagged
+    finding in its triage's count or "not recorded", a pass only as a miss. In T370's case
+    Sheet2's `already_known`, which the fold clears, is the one too many. The owner's call; the
+    review left it for later ([`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 13).
+  - The three replay fixtures (`reviewer/tests/fixtures/replay/`) were not regenerated with the
+    review's first fix. Their generator plays its scripts through `finding_body`, so the next
+    regeneration will end each `finding` event's body in each `events.jsonl` with
+    `"triage_tally":null` - 96 lines in `big-assembly`, 11 in `small-assembly-a` and 7 in
+    `small-assembly-b`, where the committed fixtures have the key nowhere - and 008
+    [contracts/replay.md](../008-checks-first-review/contracts/replay.md) section 8's
+    `git diff --exit-code` gate will show exactly that difference, which this cycle caused. The
+    generator reads the owner's recordings through the mapping outside the repository, which this
+    cycle's work did not read (the backlog's cycle 13 section).
   - A read-only restore's withdrawal line names a finding the page never shows: no
     "F-007 recorded: <title>" line precedes it, and `report.md`'s "Withdrawn with a decision" has
     the same gap. Left for later by the review (the backlog's cycle 13 section).
@@ -7373,4 +7385,11 @@ the decision register now records 160A as done.
   error card with no next step, never drawn again: it now waits for the labels as a snapshot does
   (*Settled*, the labels race). Two points are left for later in the backlog's cycle 13 section,
   each under *Left open* above: the restored withdrawal line's unnamed finding, and the mid-turn
-  overcount, which is the owner's call.
+  overcount, which is the owner's call. *Added 2026-11-03:* a read-only check of the fixes, no
+  must-fix and five should-fix, as T374's second dated sub-item records. The first fix left the
+  replay fixtures stale until their next regeneration, and the mid-turn overcount was misstated
+  here, in the backlog and in T374; *Left open* now names the first and states the second. A
+  fact proved by three mutants pins that a review the engineer left before the labels answered
+  draws nothing once they have, not even a failure's error card; and 009
+  [contracts/review-summary.md](../009-engineer-workspace/contracts/review-summary.md) section 5
+  names the `finding` event's tally. The whole suites run next, on the tree after these fixes.

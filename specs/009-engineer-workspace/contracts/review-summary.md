@@ -140,6 +140,13 @@ the same object, and the page shows the last it was sent, none while it was sent
 section while no summary has arrived - so Send stays directly after `#summary` (015
 `contracts/pane.md` section 3).
 
+*Amended 2026-11-03 (feature 002 cycle 13; the read-only check of its Tier 2 review's fixes):* the
+`finding` event names the tally too, on every body - the review's tally as the finding leaves it,
+null while no finding records a triage (002
+[chat-events.schema.json](../../002-task-pane-assistant/contracts/chat-events.schema.json)). On a
+`finding` event the page changes the tally only when the body names the key: null hides it, and a
+body without the key - an older backend's, which never names it - leaves it as it was (FR-030).
+
 `render.summaryBlock(summary)` builds `<section id="summary">` at the top of Results: the headline;
 one line per group (`label` in the lead face, `text`, then each `by_goal` as "title count"); the
 questions `text`; the `not_loaded` `text`; the `drawings` `text`, verbatim, when `drawings` is not
