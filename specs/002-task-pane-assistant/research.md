@@ -8426,7 +8426,7 @@ both files are written, so a Retry that starts after `ended` cannot rotate the s
     `running` and settling, so each write and snapshot waits out the bound first (backlog, cycle
     24).
 - **Tier 2 review** (T408; 2026-11-03): no must-fix and five should-fix, all fixed test first
-  ([tasks.md](tasks.md), T408's sub-item); what the fixes leave is under *Left open* and in
+  ([tasks.md](tasks.md), T408's first sub-item); what the fixes leave is under *Left open* and in
   `docs/review-backlog.md`'s cycle 24 section:
   - **The snapshot waits** (should-fix 1, older than the cycle but in its moment). A review
     switched to, or the pane reloaded, as a turn settled was restored `running` while its
@@ -8451,6 +8451,12 @@ both files are written, so a Retry that starts after `ended` cannot rotate the s
     not change while a chat settles.
   - **`raising=False`** dropped from both `SETTLE_WAIT_S` monkeypatches (should-fix 5), so a
     renamed constant fails them rather than leaving the real 5 s in force.
+  - *Added 2026-11-03:* the read-only check of these fixes, no must-fix and five should-fix, all
+    in the cycle's change and all done ([tasks.md](tasks.md), T408's second sub-item): guards
+    that a request takes its place out of the line, a cancelled one too; the cases' order taken
+    from the line rather than from half a second between two sends; 009's snapshot note naming
+    its two exceptions; the minutes written once; and `settling`'s docstring naming every request
+    that waits.
 - **Gates** (T408; 2026-11-03), on the cycle's final tree:
   - The whole non-live suite, the tokenizer required, on Python 3.12.3: 19,003 passed and
     5 skipped, seven of them this cycle's new cases. Its two warnings are neither of this cycle:
@@ -8468,5 +8474,5 @@ both files are written, so a Retry that starts after `ended` cannot rotate the s
   - No C# or page file changed, so no C# gate, and no words changed. No SOLIDWORKS process, seat
     task, or paid or live test ran.
   - The whole suites on the final tree: recorded once they run.
-  - *Changed 2026-11-03:* the counts above came before the Tier 2 review's fixes; their gates are
-    T408's sub-item in [tasks.md](tasks.md).
+  - *Changed 2026-11-03:* the counts above came before the Tier 2 review's fixes and the read-only
+    check's; their gates are T408's two sub-items in [tasks.md](tasks.md).
