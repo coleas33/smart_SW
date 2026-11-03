@@ -8521,3 +8521,38 @@ command - and a save in that instant failed.
     publisher meets `ContextStoreBusy` for up to 1.88 s more, as during any publish; and a backend
     asked to stop finalizes its live reviews inside the add-in's 5 s grace
     (`BackendProcess.StopGrace`), where a save still waiting at the kill is cut, as any save is.
+- **Built** (2026-11-03; T410 and T411 in [tasks.md](tasks.md), Phase 40, the tests written first):
+  - `reviewer/src/swreview/atomic.py` (T411): `write_atomic` replaces through `_replace`, which
+    tries `os.replace` again after each of `REPLACE_WAITS_S` while it is refused with a
+    `PermissionError` whose `winerror` is in `HELD_ELSEWHERE`, and raises any other error, or the
+    last refusal, as it is.
+  - What the engineer sees: nothing new. A save - a decision, minutes, a review's end - that meets
+    a record another reader holds for a moment lands instead of failing; a real reader holding
+    the record 100 ms is waited out in about 0.18 s.
+  - Tests first (T410), in `reviewer/tests/unit/test_atomic.py`: six cases failed for want of the
+    retry - four stubbed ones, which met the first refusal raised at once or no wait at all, and
+    two real readers on Windows, Python's read and the add-in's session-head read, which met
+    `PermissionError` [WinError 5]. The guard, an error not another handle's tried once, passed
+    before and after; two mutants of its line failed it, the file restored byte for byte. No
+    existing test changed but the specs-README pin's 002 literal, on purpose (T409, T412).
+- **Left open**:
+  - A reader that holds a record past 1.88 s - an editor or a preview that keeps it open - still
+    fails the save, as before; and a target the replace can never take, a read-only file or a
+    folder, which Windows also answers with `ERROR_ACCESS_DENIED`, fails 1.88 s later than before.
+  - `benchmark/report_page.py`'s own replace of its staged `index.html` is not `write_atomic`'s,
+    and is unchanged.
+- **Gates** (T412; 2026-11-03), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required, on Python 3.12.3: 19,005 passed and 5
+    skipped, 9 of them this cycle's new cases; its two warnings are neither of this cycle's, and
+    none of its 51 tests that took 1.8 s or more waited on the writer, run again with a probe of
+    its waits.
+  - On Python 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the modules the change
+    touches and those that read the files it changed: 32 modules, 1,753 passed; the nine that read
+    these records, run again once the counts were written, 602 passed on each version.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed. No C# or page file changed, so
+    no C# gate ran.
+  - The link check over the cycle's four changed Markdown files, anchors included, 444 links and
+    none broken; every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or
+    live test ran.
+  - The whole suites on the final tree: recorded once they run.
