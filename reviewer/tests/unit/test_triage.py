@@ -373,9 +373,7 @@ def test_a_late_triage_keeps_a_note_sent_with_it_when_none_was_recorded(
         run_dir, "F-001", decision, late_note, OTHER_BY, at=LATER_AT, triage="new_and_real"
     )
 
-    expected = Disposition(
-        decision=decision, note=kept, by=BY, at=FIRST_AT, triage="new_and_real"
-    )
+    expected = Disposition(decision=decision, note=kept, by=BY, at=FIRST_AT, triage="new_and_real")
     assert find_finding(session, "F-001").disposition == expected
     assert recorded(run_dir, "F-001") == expected
 
@@ -385,7 +383,7 @@ def test_a_deferred_finding_takes_a_late_triage_and_stays_deferred(tmp_path: Pat
     sent again with it, and stays deferred - its note, `by` and `at` as first recorded - in the
     session the call returns, in `session.json` and in `report.md`, so a finding deferred to be
     decided later is judged without deciding it. Still deferred, it is decided later as any Defer
-    is: an Accept naming no triage keeps the one recorded."""
+    is: a Reject naming no triage keeps the one recorded."""
     run_dir = run_folder(tmp_path)
     apply_disposition(run_dir, "F-001", "deferred", "FICT first note", BY, at=FIRST_AT)
 

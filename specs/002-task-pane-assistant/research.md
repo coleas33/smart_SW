@@ -7172,7 +7172,51 @@ the decision register now records 160A as done.
   - **The note box.** The card draws it with the recorded note and fills it again from the record
     after each reply - a refusal's too, as the triage row shows the record again (H-g-012) - and
     each `disposition` event, so it never shows a note the backend did not keep, and a later press
-    sends the recorded note, or the engineer's edit of it, never an empty box over it. A Defer's
-    later Accept or Reject still records the note it sends, as before.
+    sends the recorded note, or the engineer's edit of it, never an empty box over it.
 - **Tests**: T364 and T366 in [tasks.md](tasks.md), Phase 31, each written first; T365 and T367
   make them green, and T368 closes the records.
+- **Built** (2026-11-02, T365 and T367): `dispositions._takes_a_late_triage` covers any decision
+  recorded without a triage, sent again with the same decision and a triage, and `_late_note`
+  keeps the note as *Settled* says; the live route and the console reach the rule through
+  `set_disposition` and `apply_disposition`, unchanged, and the console's help says so. The words
+  file's `labels.no_triage.deferred`, with the four pane fixtures that embed the block
+  regenerated, `review-send-failure-events.json`'s pin moved and `LabelsSample.cs` mirroring it.
+  The page: `render.showNote`, called when `decisions` draws the box, by `showDisposition` after
+  each reply and `disposition` event, and by `decide` after a refusal. Dated notes in
+  [contracts/chat-api.md](contracts/chat-api.md) (the disposition route) and 001
+  [contracts/cli.md](../001-agentic-design-review/contracts/cli.md) (`swreview disposition`), at
+  the close (T368).
+- **Tests changed on purpose**, none loosened: `test_a_decided_finding_without_a_triage_takes_one_once`
+  (its docstring: the first note stays because one is recorded; its assertions as they were);
+  `test_a_second_triage_or_another_decision_is_still_refused`, whose case
+  `a-defer-again-with-a-triage`, now a Defer's late triage, is `a-defer-again-with-no-triage`,
+  still refused; `test_a_card_with_no_triage_names_the_repair` (a Defer's words);
+  `ADecidedFindingWithoutATriageTakesOneWithTheSameDecision` (the box after the late triage and
+  after the refusal); `APickedTriageTravelsWithTheDecisionAndIsShownOnTheCard` and
+  `ARefusedTriageShowsTheRecordedTriageAgain` (each posted body pinned an empty box over a
+  recorded note); `ANoTriageLineIsWhollyVisibleAtThreeHundredPixelsInItsRow` (an Accept's words,
+  now the longest); two facts' summaries naming a Defer's new words; and the 002 literal of the
+  specs-README pin (T363, T368).
+- **Tests first**: T364's 13 cases failed before T365, and T366's five facts before T367, each for
+  want of its change ([tasks.md](tasks.md), T364 and T366); a mutant of the refusal's note fill
+  failed one fact alone (T367). The close's whole C# suite then failed one fact, which reads every
+  dotted string literal of the page as a message type, on `showNote`'s selector `'input.note'`;
+  it finds the box by `'.note'` now, as `decide` does (T367's dated sub-item).
+- **Left open**: a Defer's later Accept or Reject still records the note it sends, so clearing the
+  box clears the note - since the box starts from the record, only on purpose; the console's
+  `--note` defaults to none, so a console Accept after a Defer with a note, sent without one,
+  still records none, as before; the seat plan's step 4.1 does not name the repair press; and the
+  hole's row in [`docs/roadmap/holes.md`](../../docs/roadmap/holes.md) is for the roadmap's next
+  update run.
+- **Gates** (T368; 2026-11-02), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required: 18,865 passed and 5 skipped on Python
+    3.12.3, and the same on 3.11.16 (`uv run --python 3.11 --isolated --all-extras`). Its two
+    warnings are neither of this cycle: the test client's deprecation, and a serializer warning
+    from `test_ir_loader_append.py`'s invalid row.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then 10,274
+    extractor and 4,336 add-in tests passed.
+  - The link check over the cycle's eight changed Markdown files, anchors included, none broken;
+    every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
+    ran.
