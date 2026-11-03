@@ -37,7 +37,9 @@ decision and never inferred from it (002 research, 185A). What this pins:
 - **an outcome needed** (002 T376, roadmap hole H-c-010): the repair press made with no outcome -
   the decision recorded without a triage, sent again with none - is refused with a `ValueError`
   of its own class, which names the repair; a Defer that holds a triage is refused another Defer
-  as before, its message naming the triage.
+  as before, its message naming the triage. Cycle 15's Tier 2 review: on a flagged finding only,
+  a pass being refused as before; a Defer sent again with a triage to one that holds one is a
+  second triage; and a decision sent with no note keeps the note recorded.
 
 Every fixture is fictional: FICT names, and an explicit `by` on every record.
 """
@@ -426,7 +428,7 @@ def test_a_deferred_finding_takes_a_late_triage_and_stays_deferred(tmp_path: Pat
         ([("rejected", None)], ("accepted", "wrong"), TERMINAL, False),
         ([("accepted", "wrong")], ("rejected", "wrong"), TERMINAL, False),
         ([("accepted", None)], ("rejected", None), TERMINAL, False),
-        ([("deferred", "wrong")], ("deferred", "already_known"), "is deferred", False),
+        ([("deferred", "wrong")], ("deferred", "already_known"), "is deferred", True),
     ],
     ids=[
         "the-same-triage-again",
@@ -471,7 +473,12 @@ def test_a_second_triage_or_another_decision_is_still_refused(
     without a triage, sent again with none - move to
     `test_the_same_decision_again_without_an_outcome_says_to_pick_one_first`, which asserts their
     own class, `OutcomeNeededError`, and its message, every decision's, and that nothing is
-    written; this test keeps every refusal whose class stays as it was."""
+    written; this test keeps every refusal whose class stays as it was.
+
+    *Changed 2026-11-03 on purpose (cycle 15's Tier 2 review):* `a-defer-again-holding-a-triage`
+    is a second triage, `TriageAlreadyRecordedError`, as on an Accept or Reject that holds one, so
+    the route's sentence names no reload, which would lose a note typed for the press
+    (`test_a_defer_holding_a_triage_is_refused_another_defer_naming_it`)."""
     run_dir = run_folder(tmp_path)
     for decision, triage in first:
         apply_disposition(run_dir, "F-001", decision, "FICT note", BY, at=FIRST_AT, triage=triage)
@@ -515,15 +522,25 @@ def test_the_same_decision_again_without_an_outcome_says_to_pick_one_first(
     assert folder_bytes(run_dir) == before
 
 
-@pytest.mark.parametrize("triage", [None, "already_known"], ids=["with-none", "with-another"])
+@pytest.mark.parametrize(
+    ("triage", "own_class"),
+    [(None, False), ("wrong", True), ("already_known", True)],
+    ids=["with-none", "with-the-same", "with-another"],
+)
 def test_a_defer_holding_a_triage_is_refused_another_defer_naming_it(
-    tmp_path: Path, triage: str | None
+    tmp_path: Path, triage: str | None, own_class: bool
 ) -> None:
     """Roadmap hole H-c-010 (002 T376): a Defer that holds a triage, sent Defer again - with none
     or another - is refused as before, with a plain `ValueError`: its outcome is recorded, so none
     is needed. The message names the triage recorded and says the finding can only move to
     accepted or rejected, which is true of a Defer that holds one; it said so of every Defer,
-    which owner decision 198A made untrue: a Defer with none takes one, sent again with Defer."""
+    which owner decision 198A made untrue: a Defer with none takes one, sent again with Defer.
+
+    *Changed 2026-11-03 on purpose (cycle 15's Tier 2 review):* sent with a triage - the one
+    recorded, as the card sends it with that triage pressed, or another - it is a second triage,
+    `TriageAlreadyRecordedError`, as on an Accept or Reject that holds one, so the route answers
+    with a sentence that names no reload, which would lose a note typed for the press; with none
+    it stays a plain `ValueError`. Case `with-the-same` added; the message is unchanged."""
     run_dir = run_folder(tmp_path)
     apply_disposition(run_dir, "F-001", "deferred", "FICT note", BY, at=FIRST_AT, triage="wrong")
     before = folder_bytes(run_dir)
@@ -533,12 +550,43 @@ def test_a_defer_holding_a_triage_is_refused_another_defer_naming_it(
             run_dir, "F-001", "deferred", "FICT later note", OTHER_BY, at=LATER_AT, triage=triage
         )
 
-    assert type(refused.value) is ValueError
+    expected = dispositions.TriageAlreadyRecordedError if own_class else ValueError
+    assert type(refused.value) is expected
     assert str(refused.value) == (
         "finding F-001 is deferred with its triage ('wrong'); it can only move to accepted or "
         "rejected, not 'deferred' again"
     )
     assert folder_bytes(run_dir) == before
+
+
+def test_a_decision_sent_with_no_note_keeps_the_note_recorded(tmp_path: Path) -> None:
+    """Cycle 15's Tier 2 review: a note of `None` is the note already recorded - the rule
+    `swreview disposition` keeps for `--note` left out, now the record's, so the console reads the
+    session once. A decision that replaces a Defer keeps the Defer's note, with its own `by`, `at`
+    and triage; a first decision records none; and a late triage keeps the note recorded."""
+    run_dir = run_folder(tmp_path)
+    apply_disposition(run_dir, "F-001", "deferred", "FICT dated note", BY, at=FIRST_AT)
+    apply_disposition(run_dir, "F-003", "accepted", "FICT first note", BY, at=FIRST_AT)
+
+    apply_disposition(
+        run_dir, "F-001", "accepted", None, OTHER_BY, at=LATER_AT, triage="new_and_real"
+    )
+    apply_disposition(run_dir, "F-002", "rejected", None, OTHER_BY, at=LATER_AT)
+    apply_disposition(run_dir, "F-003", "accepted", None, OTHER_BY, at=LATER_AT, triage="wrong")
+
+    assert recorded(run_dir, "F-001") == Disposition(
+        decision="accepted",
+        note="FICT dated note",
+        by=OTHER_BY,
+        at=LATER_AT,
+        triage="new_and_real",
+    )
+    assert recorded(run_dir, "F-002") == Disposition(
+        decision="rejected", note="", by=OTHER_BY, at=LATER_AT
+    )
+    assert recorded(run_dir, "F-003") == Disposition(
+        decision="accepted", note="FICT first note", by=BY, at=FIRST_AT, triage="wrong"
+    )
 
 
 # --- the report (002 T314) -----------------------------------------------------------------------
@@ -703,6 +751,39 @@ def test_a_pass_takes_wrong_or_none_and_a_late_wrong_once(tmp_path: Path) -> Non
         decision="accepted", note="FICT note", by=BY, at=FIRST_AT, triage="wrong"
     )
     assert recorded(run_dir, "F-001").triage == "already_known"
+
+
+@pytest.mark.parametrize(
+    ("decision", "refusal"),
+    [
+        ("accepted", f"finding F-004 already has a {TERMINAL} ('accepted'); it cannot be changed"),
+        ("rejected", f"finding F-004 already has a {TERMINAL} ('rejected'); it cannot be changed"),
+        (
+            "deferred",
+            "finding F-004 is deferred; it can only move to accepted or rejected, not 'deferred' "
+            "again",
+        ),
+    ],
+    ids=["accepted", "rejected", "deferred"],
+)
+def test_a_pass_decided_without_a_triage_is_refused_the_same_decision_as_before(
+    tmp_path: Path, decision: str, refusal: str
+) -> None:
+    """Cycle 15's Tier 2 review: a pass decided with no triage, sent the same decision again with
+    none - a note typed and the button pressed again, or a double click - is refused with a plain
+    `ValueError`, as before H-c-010, not `OutcomeNeededError`: a pass has no no-triage line, and
+    the one outcome its card offers is the miss, so a sentence asking for an outcome would have the
+    engineer record a miss on a pass judged fine. Nothing is written."""
+    run_dir = pass_folder(tmp_path)
+    apply_disposition(run_dir, "F-004", decision, "FICT note", BY, at=FIRST_AT)
+    before = folder_bytes(run_dir)
+
+    with pytest.raises(ValueError) as refused:
+        apply_disposition(run_dir, "F-004", decision, "FICT later note", OTHER_BY, at=LATER_AT)
+
+    assert type(refused.value) is ValueError
+    assert str(refused.value) == refusal
+    assert folder_bytes(run_dir) == before
 
 
 @pytest.mark.parametrize(
