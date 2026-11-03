@@ -7472,6 +7472,10 @@ the decision register now records 160A as done.
   - The link check over the cycle's eight changed Markdown files, anchors included, none broken;
     every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
     ran.
+  - *Changed 2026-11-03:* that tree came before the Tier 2 review's fixes. On the final tree
+    (`5b20d983`), the whole suites: 18,929 passed and 5 skipped on Python 3.12.3 and the same on
+    3.11; ruff clean; the identifier scan, 58 passed; C# with zero warnings, then 10,274
+    extractor and 4,349 add-in tests passed (T380's last sub-item).
 - **Review** (cycle 15's Tier 2 review, 2026-11-03; one must-fix, two should-fix, each fixed
   test first under T380; no decision id):
   - *A pass pressed again* (must-fix). `OutcomeNeeded` reached a pass too, whose card has no
