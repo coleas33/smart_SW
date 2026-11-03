@@ -1116,3 +1116,60 @@ note.
 - *Changed 2026-11-03:* the whole suites ran on the final tree, cycle 14 stacked on cycles 12, 13
   and 11 (`13611b22`): 18,914 passed and 5 skipped on Python 3.12.3 and the same on 3.11; ruff
   clean; the identifier scan, 58 passed (T085's last sub-item).
+
+## R12. Minutes typed on the Review page (cycle 18, 2026-11-03)
+
+**What**: a minutes form at the end of the Review page's Results: one field per human timing
+input, each labelled from the words file, and Save, which posts the six to
+`POST /sessions/{chat_id}/timing` ([contracts/timing.md](contracts/timing.md) section 3), the
+route that records them on the review the backend holds. Roadmap run 5 proposes it as hole
+H-g-010's feature route, second in its brief; it is built before the owner's pick (review Tier
+2). No decision id: it serves 183A and 186A as they stand.
+
+**Why**: the seat plan records a timed review's minutes with `swreview timing` after a backend
+restart (step 4.5, item 4), because the backend saves the review it holds over any write to its
+folder (`reviewer/src/swreview/chat/sessions.py`, `record_disposition`). The restart ends the
+pane's live session, so from then on the pane's triage is locked and a console triage can be saved
+over unannounced (H-g-010). The route writes the session the backend holds, so nothing saves over
+it, but no page called it; the spec's Assumptions called a pane control a follow-on.
+
+**Settled**, the defaults taken:
+
+1. The words are two groups of the words file's `labels`, after `note`, so `source` stays just
+   before `errors`: `timing`, one word per input keyed by `TIMING_INPUTS` in their order, and
+   `timing_form`, the form's heading, its button and the line a save leaves. The page draws one
+   field per key of `timing`, in its order, and posts each under its key, so it holds no list of
+   the inputs of its own; the words test ties the group to `TIMING_INPUTS`. With no labels, or a
+   backend that names neither group, there is no form (009 FR-030: the page as it was).
+2. Where: the last panel of Results, after the pinned answers: the minutes are the last thing done
+   before leaving a review, and Results' top is the review in ten seconds. Hidden, as Results' other
+   parts are, while another document is active.
+3. When: shown on a live review once a turn of it has ended - its stream's `turn.ended` or
+   `session.ended`, which a waiting review's checks end with too, or a live snapshot not mid-turn;
+   off while a turn runs, a review starts, a Send is on its way or a save is; absent on a
+   read-only restore.
+4. The body: all six keys, a blank field as null, which keeps what is recorded; a number as
+   typed; and text that is not a number as typed, which the route refuses by name
+   (`InvalidTiming`), so the page holds no rule about minutes. The fields are text boxes, so what
+   was typed is what is sent and what stays. Save is off while every field is blank: it would
+   record nothing.
+5. After a save, the words file's line and nothing of the reply, which carries the figures and the
+   net. After a refusal, its class's sentence from `labels.errors` and the class in the Details
+   fold, never the backend's message, which names a refused figure. Either way the fields keep
+   what was typed, and the line goes once a field is typed in again.
+6. The form starts blank on every review it shows. The snapshot carries no timing, and carrying it
+   would show supervision, verification and false alarms as 0 on every fresh review - their
+   starting value, which the record cannot tell from a recorded 0 (the backlog's cycle 1 item) - as
+   if the engineer had typed them. So the snapshot is unchanged, and a review switched to never
+   shows another review's figures.
+7. The figures: in the fields, and where the route writes them, as `swreview timing` writes them -
+   the run folder's `session.json`, and `report.md` and `attention.json` rendered again (186A);
+   never in the Transcript or the page's other text, the findings document or a repository file.
+8. The seat plan: step 4.1 has the six typed on the page before the engineer leaves A's review,
+   once every finding is judged; step 4.5's item 4 checks what the page wrote and is the console
+   fallback when the backend restarted before they were saved. Item 2's restart stays: it is 009
+   T083's restore, not the timing's alone. M0-a's row types the minutes on the page.
+
+**Not changed**: the route's rules (contracts/timing.md section 3); the pane's proxy, which already
+forwards the call as one that starts no turn (`BackendProxyHandler.StartsATurn`); `swreview
+timing`; the snapshot.
