@@ -4269,7 +4269,9 @@ def test_the_report_is_served_as_markdown(
 
 SETTLE_BOUND_S = 2.0
 """`SETTLE_WAIT_S` as the bound's two cases set it: long beside a refusal given at once, and short
-beside the 5 s the contract names, so the case that waits it out stays quick."""
+beside the 5 s the contract names, so the case that waits it out stays quick. *Changed 2026-11-03
+(cycle 24's Tier 2 review):* both set it without `raising=False`, so a renamed constant fails them
+rather than leaving the real 5 s in force, which both would still pass."""
 
 DECISION = {"decision": "accepted", "note": "", "by": "FICT-ENG"}
 
@@ -4324,20 +4326,42 @@ def review_ending(
     return chat_id, final_render
 
 
+def sent_in_one_settle(held: FinalRender, *requests: Callable[[], Any]) -> list[Any]:
+    """Each of `requests` sent in its own thread while the final render is held, in order and half
+    a second apart, and their answers once the render is let go. A refusal comes back at once; a
+    request that waits for the settle is still waiting, which is checked before the render is let
+    go."""
+    responses: list[Any] = [None] * len(requests)
+
+    def send(index: int) -> None:
+        try:
+            responses[index] = requests[index]()
+        except Exception as exc:  # the test client raises the server's own error; raised below
+            responses[index] = exc
+
+    senders = [threading.Thread(target=send, args=(index,)) for index in range(len(requests))]
+    for sender in senders:
+        sender.start()
+        sender.join(0.5)
+    waited = [sender.is_alive() for sender in senders]
+    held.release.set()
+    for sender in senders:
+        sender.join(TIMEOUT_S)
+    for still_waiting, response in zip(waited, responses, strict=True):
+        if isinstance(response, Exception):
+            raise response
+        assert still_waiting, (
+            f"answered before the chat settled: {response.status_code} {response.text}"
+        )
+    return responses
+
+
 def sent_as_the_review_ends(held: FinalRender, write: Callable[[], Any]) -> Any:
     """`write` sent while the final render is held, and its answer once the render is let go. A
     refusal comes back at once; a write that waits for the settle is still waiting half a second
-    later, which is checked before the render is let go."""
-    answered: dict[str, Any] = {}
-    sender = threading.Thread(target=lambda: answered.update(response=write()))
-    sender.start()
-    sender.join(0.5)
-    waited = sender.is_alive()
-    held.release.set()
-    sender.join(TIMEOUT_S)
-    response = answered["response"]
-    assert waited, f"answered before the chat settled: {response.status_code} {response.text}"
-    return response
+    later, which is checked before the render is let go. *Changed 2026-11-03 (cycle 24's Tier 2
+    review):* one request of `sent_in_one_settle`, which sends several the same way."""
+    return sent_in_one_settle(held, write)[0]
 
 
 @pytest.mark.parametrize(
@@ -4443,7 +4467,7 @@ def test_past_the_bound_a_decision_sent_as_the_review_ends_is_turn_running_and_w
     """The wait is bounded (002 cycle 24): a chat that has not settled once `SETTLE_WAIT_S` has
     passed answers the decision as before, `409 TurnRunning` with today's message, and nothing is
     written. The bound is set short here; the contract names 5 s."""
-    monkeypatch.setattr(chat_server, "SETTLE_WAIT_S", SETTLE_BOUND_S, raising=False)
+    monkeypatch.setattr(chat_server, "SETTLE_WAIT_S", SETTLE_BOUND_S)
     chat_id, held = review_ending
     url = disposition_url(chat_id, run_dir)
 
@@ -4477,7 +4501,7 @@ def test_a_decision_while_a_turn_still_runs_is_turn_running_at_once(
 ) -> None:
     """Only a turn that has ended is waited for (002 cycle 24): while one still runs, a decision is
     `409 TurnRunning` at once, as before, and not once the bound has passed."""
-    monkeypatch.setattr(chat_server, "SETTLE_WAIT_S", SETTLE_BOUND_S, raising=False)
+    monkeypatch.setattr(chat_server, "SETTLE_WAIT_S", SETTLE_BOUND_S)
     url = disposition_url(chat_with_a_finding, run_dir)
     provider_control.hold()
     client.post(f"/sessions/{chat_with_a_finding}/messages", json={"text": "keep going"})
@@ -4492,6 +4516,211 @@ def test_a_decision_while_a_turn_still_runs_is_turn_running_at_once(
     assert (refused.status_code, refused.json()["error_class"]) == (409, "TurnRunning")
     assert took < SETTLE_BOUND_S / 2, f"refused after {took:.3f} s: it waited"
     assert load_session(run_dir / "session.json").findings[0].disposition is None
+
+
+# --- cycle 24's Tier 2 review (002 T408) -------------------------------------------------------
+#
+# A snapshot asked for in that moment waits for the settle as a write does. The requests that waited
+# go on one at a time, in the order they came, and a decision or minutes among them is written on
+# the chat's worker, so the writes one settle releases and the turn a follow-up starts run in line.
+
+SLOW_LOOK_S = 2.0
+"""`POLL_S` as a case sets it to put a request's next look at the chat after the settle and after a
+later request's: long beside the half second between two requests, short beside the 5 s bound."""
+
+MINUTES = {"baseline": 45, "supervision": 6, "verification": 9, "false_alarms": 2}
+
+
+def traced_writes(monkeypatch: pytest.MonkeyPatch, chat_id: str) -> list[tuple[str, bool]]:
+    """Each decision's finding id, or `minutes`, in the order they are written, and whether each
+    was written on the chat's worker, the one thread its turns run on (`ChatServer._worker`)."""
+    worker = f"chat-{UUID(chat_id).hex[:8]}_"
+    written: list[tuple[str, bool]] = []
+    decide, save_minutes = chat_server.record_disposition, chat_server.record_timing_live
+
+    def on_the_worker() -> bool:
+        return threading.current_thread().name.startswith(worker)
+
+    def decision(run: Any, finding_id: str, **kwargs: Any) -> Any:
+        written.append((finding_id, on_the_worker()))
+        return decide(run, finding_id, **kwargs)
+
+    def minutes(run: Any, **kwargs: Any) -> Any:
+        written.append(("minutes", on_the_worker()))
+        return save_minutes(run, **kwargs)
+
+    monkeypatch.setattr(chat_server, "record_disposition", decision)
+    monkeypatch.setattr(chat_server, "record_timing_live", minutes)
+    return written
+
+
+def test_a_snapshot_asked_for_as_the_review_ends_waits_for_the_settle_and_says_how_it_settled(
+    client: TestClient, run_dir: Path, review_ending: tuple[str, FinalRender]
+) -> None:
+    """A review switched to, or the pane reloaded, in that moment was restored `running` while the
+    snapshot's `last_seq` already counted `session.ended`, so the page held its turn running on a
+    stream opened past the one event that ends it (cycle 24's Tier 2 review, should-fix 1). The
+    snapshot waits for the settle as a write does, and names the state the chat settled in."""
+    chat_id, held = review_ending
+
+    response = sent_as_the_review_ends(held, lambda: client.get(f"/sessions/{chat_id}/snapshot"))
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["chat_state"], body["last_seq"]) == (ChatState.ENDED.value, seqs_of(run_dir)[-1])
+    assert types_of(run_dir)[-1] == "session.ended"
+
+
+def test_writes_sent_in_one_settle_are_written_one_at_a_time_on_the_chats_worker_in_order(
+    client: TestClient,
+    run_dir: Path,
+    review_ending: tuple[str, FinalRender],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The writes that waited were released together and each ran in the thread pool, beside the
+    others, each saving `session.json` and writing `report.md` (cycle 24's Tier 2 review,
+    should-fix 2). A write that waited goes to the chat's worker, in the order it came: two
+    decisions and the minutes are written one after another, and each is kept."""
+    chat_id, held = review_ending
+    first, second = (finding.id for finding in load_session(run_dir / "session.json").findings[:2])
+    written = traced_writes(monkeypatch, chat_id)
+
+    responses = sent_in_one_settle(
+        held,
+        lambda: client.post(f"/sessions/{chat_id}/findings/{first}/disposition", json=DECISION),
+        lambda: client.post(f"/sessions/{chat_id}/findings/{second}/disposition", json=DECISION),
+        lambda: client.post(f"/sessions/{chat_id}/timing", json=MINUTES),
+    )
+
+    assert [response.status_code for response in responses] == [200, 200, 200], [
+        response.text for response in responses
+    ]
+    assert written == [(first, True), (second, True), ("minutes", True)]
+    assert state_of(client, chat_id) == ChatState.ENDED.value
+    decisions = [response.json()["disposition"] for response in responses[:2]]
+    saved = load_session(run_dir / "session.json")
+    assert [
+        finding.disposition.model_dump(mode="json") if finding.disposition else None
+        for finding in saved.findings[:2]
+    ] == decisions
+    assert saved.timing.net_saved_minutes == 28.0
+    assert recorded_dispositions(run_dir) == decisions
+
+
+def test_a_decision_sent_before_a_follow_up_in_one_settle_is_written_before_its_turn(
+    client: TestClient,
+    run_dir: Path,
+    review_ending: tuple[str, FinalRender],
+    provider_control: ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Released together, a follow-up that looked at the chat first started its turn, and a
+    decision pressed before it then met that turn, `409 TurnRunning` (cycle 24's Tier 2 review,
+    should-fix 2). The requests that waited go on in the order they came: the decision is written,
+    on the chat's worker, and the follow-up's turn starts after it. The decision's next look at the
+    chat is set after the follow-up's, as the two can fall on a slow seat."""
+    chat_id, held = review_ending
+    url = disposition_url(chat_id, run_dir)
+    finding_id = load_session(run_dir / "session.json").findings[0].id
+    written = traced_writes(monkeypatch, chat_id)
+    provider_control.hold()
+    poll = chat_server.POLL_S
+
+    def follow_up() -> Any:
+        monkeypatch.setattr(chat_server, "POLL_S", poll)  # every later look at the usual rate
+        return client.post(f"/sessions/{chat_id}/messages", json={"text": "and also"})
+
+    monkeypatch.setattr(chat_server, "POLL_S", SLOW_LOOK_S)
+    decided, followed = sent_in_one_settle(held, lambda: client.post(url, json=DECISION), follow_up)
+    provider_control.release()
+
+    assert decided.status_code == 200, decided.text
+    assert followed.status_code == 202, followed.text
+    assert settle(client, chat_id) == ChatState.ENDED.value
+    assert written == [(finding_id, True)]
+    types = types_of(run_dir)
+    assert types.count("session.ended") == 2
+    assert types[types.index("session.ended") + 1] == "disposition"
+
+
+def test_a_decision_sent_once_the_chat_has_settled_goes_behind_a_follow_up_still_waiting(
+    client: TestClient,
+    run_dir: Path,
+    review_ending: tuple[str, FinalRender],
+    provider_control: ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A request that arrives once the chat has settled, while one sent before it has still to see
+    the settle, goes behind it (cycle 24's Tier 2 review, should-fix 2): a decision sent after a
+    follow-up meets the turn the follow-up starts, `409 TurnRunning`, as it would a moment later,
+    and is never written beside that turn. Each look at the chat is set a second apart, so the
+    follow-up sees the settle well after the decision arrives."""
+    chat_id, held = review_ending
+    url = disposition_url(chat_id, run_dir)
+    provider_control.hold()
+    monkeypatch.setattr(chat_server, "POLL_S", SLOW_LOOK_S / 2)
+    answered: dict[str, Any] = {}
+    follower = threading.Thread(
+        target=lambda: answered.update(
+            response=client.post(f"/sessions/{chat_id}/messages", json={"text": "and also"})
+        )
+    )
+    follower.start()
+    follower.join(0.5)
+    assert follower.is_alive(), "the follow-up was answered before the chat settled"
+    held.release.set()
+    assert settle(client, chat_id) == ChatState.ENDED.value
+
+    refused = client.post(url, json=DECISION)
+    follower.join(TIMEOUT_S)
+    provider_control.release()
+
+    assert answered["response"].status_code == 202, answered["response"].text
+    assert (refused.status_code, refused.json().get("error_class")) == (409, "TurnRunning")
+    assert settle(client, chat_id) == ChatState.ENDED.value
+    assert types_of(run_dir).count("session.ended") == 2
+    assert load_session(run_dir / "session.json").findings[0].disposition is None
+    assert recorded_dispositions(run_dir) == []
+
+
+@pytest.mark.parametrize(
+    ("route", "body"),
+    [
+        pytest.param("/evidence/ER-001", {"answer": "Tapped 12 mm deep."}, id="evidence/{id}"),
+        pytest.param(
+            "/evidence",
+            {"answers": [{"request_id": "ER-001", "answer": "Tapped 12 mm deep."}]},
+            id="evidence",
+        ),
+    ],
+)
+def test_answers_sent_as_the_turn_that_asked_ends_wait_and_resume_the_review(
+    client: TestClient,
+    run_dir: Path,
+    provider_control: ProviderControl,
+    final_render: FinalRender,
+    route: str,
+    body: dict[str, Any],
+) -> None:
+    """Both `evidence` routes wait for the settle (002 cycle 24; its Tier 2 review, should-fix 4):
+    answers sent as the turn that asked ends are taken once the chat settles `waiting_engineer`, and
+    resume the review."""
+    provider_control.script = [
+        turn("I need the thread depth.", call("request_evidence", **EVIDENCE_ARGUMENTS)),
+        turn("Thanks; the joint is fine."),
+    ]
+    chat_id = start_session(client, run_dir)["chat_id"]
+    ended_and_still_running(client, run_dir, chat_id, final_render)
+
+    response = sent_as_the_review_ends(
+        final_render, lambda: client.post(f"/sessions/{chat_id}{route}", json=body)
+    )
+
+    assert response.status_code == 202, response.text
+    assert settle(client, chat_id) == ChatState.ENDED.value
+    request = load_session(run_dir / "session.json").evidence_requests[0]
+    assert (request.status, request.answer) == ("answered", "Tapped 12 mm deep.")
+    assert types_of(run_dir).count("session.ended") == 2
 
 
 # --- stopping ------------------------------------------------------------------------

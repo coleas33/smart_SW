@@ -44,6 +44,7 @@ provider_control = chat.provider_control
 run_root = chat.run_root
 pipe_app = send_cases.pipe_app
 pipe_client = send_cases.pipe_client
+final_render = chat.final_render
 
 
 @dataclass(frozen=True)
@@ -286,6 +287,74 @@ def test_an_answer_is_refused_while_a_send_is_in_flight(
     finally:
         provider_control.release()
     chat.settle(client, waiting.chat_id)
+
+
+# --- 002 cycle 24's Tier 2 review: Send and a write as an applied answer ends (T408) -------------
+
+
+def applied_and_ending(
+    app: Any, client: TestClient, folder: Path, held: chat.FinalRender
+) -> Waiting:
+    """A waiting review whose code answer has been applied and is held at its final render:
+    `session.ended` on the stream and the chat `running`, about to wait for Send again."""
+    waiting = waiting_review(app, client, folder)
+    assert apply(client, waiting, (question(waiting).id, "All bought")).status_code == 202
+    chat.ended_and_still_running(client, folder, waiting.chat_id, held)
+    return waiting
+
+
+def test_send_pressed_as_an_applied_answer_ends_waits_for_the_settle_and_sends(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    final_render: chat.FinalRender,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`send` waits for the settle as every route that refuses a running turn does (002 cycle 24;
+    its Tier 2 review, should-fix 4): Send pressed as an answer the code applied ends is taken once
+    the chat waits for Send again, and sends the review."""
+    waiting = applied_and_ending(app, client, run_root / "FICT-send-as-it-settles", final_render)
+    provider = RecordingProvider([chat.turn("FICT sent")])
+    monkeypatch.setattr(app.state.server, "provider_factory", lambda settings: provider)
+
+    sent = chat.sent_as_the_review_ends(
+        final_render, lambda: client.post(f"/sessions/{waiting.chat_id}/send", json={})
+    )
+
+    assert sent.status_code == 202, sent.text
+    chat.settle(client, waiting.chat_id)
+    assert provider.log
+    assert not waiting.run.awaiting_send
+    assert "session.sent" in [event.type for event in replay_events(waiting.run.events_path)]
+
+
+@pytest.mark.parametrize("kind", ["decision", "minutes"])
+def test_a_write_sent_as_an_applied_answer_ends_goes_to_the_chats_worker(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    final_render: chat.FinalRender,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+) -> None:
+    """A decision or minutes sent as an answer the code applied ends wait for the settle, and then
+    go to the chat's worker, as every write on a review waiting for Send does (owner decision 69A),
+    the chat left waiting (002 cycle 24; its Tier 2 review, should-fix 4)."""
+    folder = run_root / f"FICT-{kind}-as-it-settles"
+    waiting = applied_and_ending(app, client, folder, final_render)
+    finding_id = waiting.run.session.findings[0].id
+    written = chat.traced_writes(monkeypatch, waiting.chat_id)
+    url, body = (
+        (f"/sessions/{waiting.chat_id}/findings/{finding_id}/disposition", chat.DECISION)
+        if kind == "decision"
+        else (f"/sessions/{waiting.chat_id}/timing", FOUR)
+    )
+
+    response = chat.sent_as_the_review_ends(final_render, lambda: client.post(url, json=body))
+
+    assert response.status_code == 200, response.text
+    assert chat.state_of(client, waiting.chat_id) == "awaiting_send"
+    assert written == [(finding_id if kind == "decision" else "minutes", True)]
 
 
 @pytest.mark.parametrize("refused", [False, True])
