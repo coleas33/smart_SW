@@ -192,6 +192,9 @@ class ChatSession:
     settling: threading.Event = field(default_factory=threading.Event)
     """Set by the server's worker once a turn has ended, while it writes the report and the
     attention record before the chat leaves `running`; a write waits for that (002 cycle 24)."""
+    settle_line: list[object] = field(default_factory=list)
+    """The requests waiting for that settle, in the order they came: each goes on once it is first
+    and the chat has settled (`ChatServer._settled`; 002 cycle 24's Tier 2 review)."""
     stream: EventStream = field(default_factory=EventStream)
     fallback_sink: EventSink | None = None
     """Where a chat that failed before its runner existed writes that one event; see `emit`."""

@@ -205,7 +205,8 @@ open stream makes 50 wakeups a second the cheaper trade.
 """
 
 SETTLE_WAIT_S = 5.0
-"""How long a write waits for a chat whose turn has ended to settle (002 cycle 24).
+"""How long a write, or the live snapshot, waits for a chat whose turn has ended to settle (002
+cycle 24; its Tier 2 review).
 
 The worker moves a chat out of `running` only once it has written the report and the attention
 record (`_play`), after the runner's `session.ended`, so a write the page makes on a review it
@@ -1523,8 +1524,13 @@ class ChatServer:
         last seq, so a page reloaded mid-turn reopens the stream where the snapshot ends.
         It computes and writes nothing, as `attention` does, and inline for the same reason.
         The chat's stream gives each undecided finding's cleared line (owner decision 193A).
+
+        A chat still settling from a turn that has ended is waited for first (`_settled`): its
+        last seq already counts `session.ended`, so `running` would hold the page's turn on a
+        stream opened past the one event that ends it (002 cycle 24's Tier 2 review).
         """
         chat = self._chat(request)
+        await self._settled(chat)
         run = self._run_of(chat)
         body = review_snapshot(
             run.session,
@@ -1694,10 +1700,11 @@ class ChatServer:
             raise InvalidTriage(f"triage must be one of {list(TRIAGES)} or null, got {triage!r}")
         finding_id = request.path_params["finding_id"]
         self._refuse_a_pass_triage(chat, finding_id, triage)
-        await self._require_idle(chat)
+        waited = await self._require_idle(chat)
         run = self._run_of(chat)
         try:
-            execute = self._on_worker if chat.state is ChatState.AWAITING_SEND else None
+            # A write that waited for the settle runs in line on the chat's worker.
+            execute = self._on_worker if waited or chat.state is ChatState.AWAITING_SEND else None
             action = partial(
                 record_disposition,
                 run,
@@ -1756,12 +1763,12 @@ class ChatServer:
         """
         chat = self._chat(request)
         inputs = _timing_inputs(await self._json(request))
-        await self._require_idle(chat)
+        waited = await self._require_idle(chat)
         run = self._run_of(chat)
         action = partial(record_timing_live, run, **inputs)
         recorded = (
             await self._on_worker(chat, action)
-            if chat.state is ChatState.AWAITING_SEND else await run_in_threadpool(action)
+            if waited or chat.state is ChatState.AWAITING_SEND else await run_in_threadpool(action)
         )
         return JSONResponse(recorded.model_dump(mode="json"))
 
@@ -2727,20 +2734,44 @@ class ChatServer:
             raise SessionFailed(f"chat {chat.chat_id} has no review behind it")
         return run
 
-    async def _require_idle(self, chat: ChatSession) -> None:
-        """Refuse the two states that cannot take an engineer's turn, with the right 409.
+    async def _settled(self, chat: ChatSession) -> bool:
+        """Wait for a chat whose turn has ended to settle, up to `SETTLE_WAIT_S`; True if it waited.
 
-        A chat whose turn has ended but which is still settling (`ChatSession.settling`) is
-        waited for first, up to `SETTLE_WAIT_S`, and then asked as it would be a moment later:
-        only a turn still running, or a settle past the bound, is `TurnRunning` (002 cycle 24).
+        A request waits from the turn's end until `_play` has written both views and moved the
+        chat (`ChatSession.settling`), and so does one that arrives while an earlier one still
+        waits. They go on one at a time in the order they came (`ChatSession.settle_line`), each
+        once it is first and the chat has settled. Every caller acts on what it found - moves the
+        chat, hands its write to the worker, reads the snapshot or refuses - before it next
+        awaits, so the one behind it sees what it did: a decision pressed before a follow-up is
+        written before the follow-up's turn, and one pressed after it meets that turn (002 cycle
+        24's Tier 2 review).
         """
-        with anyio.move_on_after(SETTLE_WAIT_S):
-            while chat.state is ChatState.RUNNING and chat.settling.is_set():
-                await anyio.sleep(POLL_S)
+        if not (_settling(chat) or chat.settle_line):
+            return False
+        place = object()
+        chat.settle_line.append(place)
+        try:
+            with anyio.move_on_after(SETTLE_WAIT_S):
+                while _settling(chat) or chat.settle_line[0] is not place:
+                    await anyio.sleep(POLL_S)
+        finally:
+            chat.settle_line.remove(place)
+        return True
+
+    async def _require_idle(self, chat: ChatSession) -> bool:
+        """Refuse the two states that cannot take an engineer's turn, with the right 409, and say
+        whether the request waited for a settle first.
+
+        A chat whose turn has ended but which is still settling is waited for first (`_settled`),
+        and then asked as it would be a moment later: only a turn still running, or a settle past
+        the bound, is `TurnRunning` (002 cycle 24).
+        """
+        waited = await self._settled(chat)
         if chat.state is ChatState.FAILED:
             raise SessionFailed(f"chat {chat.chat_id} failed; retry it as a new session (retry_of)")
         if chat.state is ChatState.RUNNING:
             raise TurnRunning(f"chat {chat.chat_id} is running a turn; wait for it to end")
+        return waited
 
     # --- the worker ------------------------------------------------------------------
 
@@ -2778,7 +2809,7 @@ class ChatServer:
             settled = (ChatState.AWAITING_SEND if chat.run is not None and chat.run.awaiting_send
                        else ChatState.WAITING_ENGINEER if chat.open_requests else ChatState.ENDED)
         finally:
-            # The turn has ended; a write that arrives from here until the settle waits for it.
+            # The turn has ended; a request that arrives from here until the settle waits for it.
             chat.settling.set()
             chat.stop_requested.clear()
             if settled is ChatState.AWAITING_SEND and chat.run is not None:
@@ -2931,6 +2962,11 @@ class ChatServer:
         self._render_report(chat)
         self._settle(chat, ChatState.ENDED)
         chat.run.close()
+
+
+def _settling(chat: ChatSession) -> bool:
+    """Has this chat's turn ended while the worker still writes its views before moving it?"""
+    return chat.state is ChatState.RUNNING and chat.settling.is_set()
 
 
 def _already_ended(chat: ChatSession) -> bool:

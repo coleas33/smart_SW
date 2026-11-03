@@ -4528,7 +4528,15 @@ SLOW_LOOK_S = 2.0
 """`POLL_S` as a case sets it to put a request's next look at the chat after the settle and after a
 later request's: long beside the half second between two requests, short beside the 5 s bound."""
 
-MINUTES = {"baseline": 45, "supervision": 6, "verification": 9, "false_alarms": 2}
+MINUTES = {
+    "baseline": 45,
+    "supervision": 6,
+    "verification": 9,
+    "false_alarms": 2,
+    "setup": 0,
+    "by_hand": 0,
+}
+"""`test_chat_timing_route.FOUR`, which this module cannot import: its net is 28.0."""
 
 
 def traced_writes(monkeypatch: pytest.MonkeyPatch, chat_id: str) -> list[tuple[str, bool]]:

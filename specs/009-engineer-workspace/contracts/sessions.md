@@ -52,6 +52,13 @@ its card, as the live event does.
 `triage_tally`, so the snapshot's one tally is its summary's ([data-model.md](../data-model.md)
 section 8).
 
+*Amended 2026-11-03 (feature 002, cycle 24's Tier 2 review):* a chat whose turn has ended but
+which is still writing its report and attention record is waited for first, up to 5 s (002
+[contracts/chat-api.md](../../002-task-pane-assistant/contracts/chat-api.md), its concurrency
+note), so `chat_state` is `running` only for a turn still running, or a settle past that bound,
+and section 5 item 6 does not open a stream past the `session.ended` the snapshot's `last_seq`
+already counts.
+
 ## 4. The run folder
 
 `GET /reviews/{run_id}` → `200` with `review_snapshot(load_session(...), load_package(...).package,
