@@ -101,7 +101,12 @@ what is recorded; the number typed; and text that is not a number as typed, whic
 refuses as `InvalidTiming`. The page prints nothing of the `200`'s `Timing`: after it, one line,
 the words file's `labels.timing_form.saved`; after a refusal, its class's sentence from
 `labels.errors`, never its message, which names a refused figure. The typed figures stay in the
-fields, and reach no other text of the page.
+fields, and reach no other text of the page. Since cycle 18's Tier 2 review (research R12): the
+form goes once the backend takes the review's minutes no more - another backend replaced the one
+that held it, or its turn failed - where `swreview timing` is the way; a `409 TurnRunning`, which
+this route answers for a moment after the turn's `session.ended` while the backend writes the
+report, is tried once more a second later; and what was typed on a review and not saved stays in
+page memory, as the questions' drafts do, and comes back when that review is shown again.
 
 ## 4. The ledger column
 

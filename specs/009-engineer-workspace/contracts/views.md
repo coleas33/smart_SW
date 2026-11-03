@@ -68,7 +68,9 @@ minutes form, after `#answers`: one box per human timing input and Save, which p
 (`plain-words.md` section 1). It shows on a live review once a turn of it has ended, is off while
 a turn runs, is absent on a read-only restore, and is hidden with the rest of a review shown while
 another document is active. The typed figures stay in its boxes: no text of Results or the
-Transcript prints one.
+Transcript prints one. Since cycle 18's Tier 2 review it goes once the backend takes the review's
+minutes no more - another backend replaced the one that held it, or its turn failed - and what
+was typed on a review and not saved comes back, in page memory, when that review is shown again.
 
 ## 3. The status line
 
