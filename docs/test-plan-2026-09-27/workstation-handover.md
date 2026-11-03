@@ -232,7 +232,7 @@ Then its step 1.6, with SOLIDWORKS started on a part:
 
 ```powershell
 Get-Content "$env:LOCALAPPDATA\SwReview\logs\addin.log" -Tail 12   # runbook section 6's check 1
-cd "$R\reviewer"; uv run swreview seat health; "exit code: $LASTEXITCODE"; cd $R   # decision 166A's check
+cd -LiteralPath "$R\reviewer"; uv run swreview seat health; "exit code: $LASTEXITCODE"; cd -LiteralPath $R   # decision 166A's check
 ```
 
 Pass: `pull exit code: 0`, the script ends at its health step with no step failed, runbook
