@@ -2531,6 +2531,10 @@ each is noted on the task lines it touches, no task box is ticked for it, and
     point):* and before the check's own fixes, whose sub-items under T123 record module subsets
     alone; the whole non-live suites on 3.12 and 3.11 with the tokenizer required, `ruff check`
     and the identifier scan, on the final tree, are T123's last step before the PR.
+  - *Changed 2026-11-03:* the whole suites ran on the final tree, cycle 12 stacked on cycles 13
+    and 11 (`ae65f7bd`): 18,895 passed and 5 skipped on Python 3.12.3 and the same on 3.11; ruff
+    clean; the identifier scan, 58 passed; C# with zero warnings, then 10,274 extractor and 4,348
+    add-in tests passed (T123's last sub-item).
 - **Review** (Tier 1, decision 180A; 2026-11-02): one Opus review, no must-fix, and five should-fix
   points, each taken as T123's dated sub-items in [tasks.md](tasks.md) record; the Codex review
   runs on its own. Test first: a chain of Check agains lost the earlier record's "Not carried"
