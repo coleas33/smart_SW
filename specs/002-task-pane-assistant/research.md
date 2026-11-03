@@ -8365,3 +8365,61 @@ both files are written, so a Retry that starts after `ended` cannot rotate the s
     show it.
   - **The page.** No change. The minutes form's one retry of a refused save stays: past the bound
     it can still be reached.
+- **Built** (2026-11-03; T406 and T407 in [tasks.md](tasks.md), Phase 39, the tests written first):
+  - The backend (T407): `ChatSession.settling` (`reviewer/src/swreview/chat/sessions.py`), set at
+    the top of `_play`'s `finally`, once the turn's action has returned, and cleared after its
+    settle; `SETTLE_WAIT_S` beside `POLL_S` in `reviewer/src/swreview/chat/server.py`; and
+    `_require_idle`, now async and awaited by its six callers, which waits within
+    `anyio.move_on_after(SETTLE_WAIT_S)` while the chat is `running` and settling, then refuses as
+    before. Dated notes in [contracts/chat-api.md](contracts/chat-api.md), beside its concurrency
+    rule, and in 007 [contracts/timing.md](../007-attention-policy-gate/contracts/timing.md)
+    section 3, whose page caller's retry named the moment.
+  - Tests (T406), in `reviewer/tests/unit/test_chat_server.py` unless named, the final render held
+    by the fixture `final_render` as the Retry case holds it, and each write checked still waiting
+    half a second into the hold before it is let go:
+    `test_a_decision_sent_as_the_review_ends_waits_for_the_settle_and_is_recorded` (a decision; a
+    decision with its triage and note),
+    `test_a_follow_up_sent_as_the_review_ends_runs_its_turn_once_the_chat_has_settled`,
+    `test_a_decision_sent_as_a_failing_turn_ends_meets_the_failure_not_a_running_turn`,
+    `test_past_the_bound_a_decision_sent_as_the_review_ends_is_turn_running_and_writes_nothing`,
+    `reviewer/tests/unit/test_chat_timing_route.py::test_a_save_sent_as_the_review_ends_waits_for_the_settle_and_is_recorded`,
+    and the guard `test_a_decision_while_a_turn_still_runs_is_turn_running_at_once`.
+  - Tests first: the six that are not the guard failed before T407, each answered at once
+    `409 TurnRunning`, the bound's case after 0.000 s. The guard passed before and after, and two
+    mutants of the lines it relies on turned it red, `server.py` restored byte for byte each time
+    with its sha256 checked: the wait without its `settling` condition, and `settling` never
+    cleared, each refused after 2.0 s, the bound as the case sets it.
+  - Changed on purpose, none loosened: the comment above `test_chat_timing_route.py`'s fixture
+    bindings, which binds two more, with a dated note; and the 002 literal of the specs-README pin
+    (T405, T408).
+- **Left open**:
+  - The page's comments on the minutes form's retry (`app.js`'s `TIMING_RETRY` and `postTiming`)
+    and `ReviewPageTimingTests`' summary still say the backend refuses a save for a moment after a
+    turn's end; since this cycle that is only a settle past the bound. Left with the page
+    unchanged, as the cycle's default asks; 007's timing contract says it.
+  - A Stop in that moment, older than the cycle
+    ([`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 24): `POST /stop` sets a
+    running chat's stop flag, and `_play` clears the flag before it writes the two files, so a
+    flag a Stop sets after the clear and before the settle stays set, and the next turn stops at
+    its first tool boundary. The page's Stop goes off once it reads `session.ended`, so only a
+    press within the stream's lag reaches the moment.
+  - The few statements between the runner's `session.ended` and the action's return are not
+    covered: a write there is still refused at once. The page reads the event through the
+    stream, which is polled every 20 ms, after them.
+- **Gates** (T408; 2026-11-03), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required, on Python 3.12.3: 19,003 passed and
+    5 skipped, seven of them this cycle's new cases. Its two warnings are neither of this cycle:
+    the test client's deprecation, and a serializer warning from `test_ir_loader_append.py`'s
+    invalid row.
+  - On Python 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the tokenizer required,
+    the modules the change touches and those that read the files it changed: 54 modules,
+    2,537 passed and 1 skipped.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed. The seven modules that read
+    the records, the scan among them, run again once these counts were written: 510 passed on
+    each version.
+  - The link check over the cycle's seven changed Markdown files, anchors included, 463
+    relative links and none broken; every changed file LF in the index.
+  - No C# or page file changed, so no C# gate, and no words changed. No SOLIDWORKS process, seat
+    task, or paid or live test ran.
+  - The whole suites on the final tree: recorded once they run.
