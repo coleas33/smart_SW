@@ -3167,7 +3167,11 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
     when an earlier review first showed its finding built: 384 done, 4 open.
 
     *Changed 2026-11-03 on purpose (007 T086; cycle 18, minutes typed on the Review page):* 007's
-    row is recounted with cycle 18's tasks, T086 to T091, T086 ticked: 81 done, 10 open."""
+    row is recounted with cycle 18's tasks, T086 to T091, T086 ticked: 81 done, 10 open.
+
+    *Changed 2026-11-03 on purpose (007 T091; cycle 18, minutes typed on the Review page):* 007's
+    row is recounted with T087 to T091 ticked, the minutes typed on the Review page built: 86 done,
+    5 open."""
     readme = (REPO / "specs" / "README.md").read_text(encoding="utf-8")
     flat = re.sub(r"\s+", " ", readme)
     rows = {line[2:5]: line for line in readme.splitlines() if re.match(r"^\| \d{3} \|", line)}
@@ -3184,7 +3188,7 @@ def test_the_specs_readme_counts_a_task_173a_closed_as_done() -> None:
         assert "Closed on 2026-10-31 (decision 173A)" in rows[number], number
         assert closed in rows[number].split("Closed on 2026-10-31")[1], number
     assert "| 393 / 22 / 0 |" in rows["004"]
-    assert "| 81 / 10 / 0 |" in rows["007"]
+    assert "| 86 / 5 / 0 |" in rows["007"]
     assert "T180" not in rows["004"]
     for task in ("T182", "T187", "T303a", "T303b", "T353"):
         assert re.search(rf"\b{task}\b", rows["004"]), task
