@@ -1231,6 +1231,12 @@ against 81 / 10 / 0 at T091, before each recount.
 - The backlog's R8, M0-a's console timing lost to a later decision on a waiting review, is
   resolved by M0-a's row typing the minutes on the page (marked in
   [`docs/review-backlog.md`](../../docs/review-backlog.md)).
+- *Added 2026-11-03:* a save's retry can land after a newer save of the same review. A save refused
+  as running a turn is tried once more a second later (the Tier 2 review's item 5, below). In that
+  second the engineer can switch away from the review and back, edit the minutes and press Save. If
+  the retry lands last, the backend holds the earlier figures while the page says the later ones are
+  recorded. Found while the Tier 2 review's items were fixed. Left, since it needs all four steps
+  within about one second.
 
 **Gates** (T091; 2026-11-03), on the final tree:
 
@@ -1248,6 +1254,15 @@ against 81 / 10 / 0 at T091, before each recount.
 - No SOLIDWORKS process, seat task, or paid or live test ran.
 - *Changed 2026-11-03:* that tree came before the Tier 2 review's fixes; their checks are in the
   next paragraph, and the whole suites run on the final tree after them.
+- *Done 2026-11-03, cycle 18 stacked on cycle 17:* the gates above, and the checks of the Tier 2
+  review and of its read-only check below, ran on cycle 18 before it was stacked on cycle 17 (002
+  Phase 35, T387 to T392). The two met in the words file, the tests that name its groups,
+  `LabelsSample.cs`, the pane fixtures and the records. Each kept both cycles' text, cycle 17's
+  first: `first_shown` stays right after `note`, and `timing` and `timing_form` follow it. 007 stays
+  86 / 5 / 0. On the stacked tree the pane fixtures' three generators wrote every fixture
+  byte-identical, and the goldens did not move. T091's sub-item of the stacking in
+  [tasks.md](tasks.md) names each meeting. The whole suites on the stacked tree are recorded next,
+  as T091's last sub-item.
 
 **The Tier 2 review** (T091; 2026-11-03; decision 180A: one Opus review). No must-fix; five
 should-fix, each fixed test first, two things they left in
