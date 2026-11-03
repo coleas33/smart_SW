@@ -35,6 +35,7 @@ from swreview.agent import runner
 from swreview.agent.events import EventSink
 from swreview.agent.providers import AgentEvent
 from swreview.agent.providers.fake import FakeProvider
+from swreview.benchmark.origins import finding_origin
 from swreview.findings import Finding, SubjectKey, finding_subject_key
 from swreview.ir.loader import load_package
 from swreview.report import first_shown
@@ -320,12 +321,15 @@ def test_a_send_on_a_later_day_dates_only_what_a_turn_raised_by_it(
     record, a finding carried from an earlier run (`benchmark/origins.finding_origin`'s `prerun`,
     `setup` and `carried`) - keeps the day the review started; what a turn raised after the Send
     - a call of the model's, a check it set up, code's re-grade after an answer - takes the day
-    it was sent."""
+    it was sent. The match reads those origins itself, since `finding_origin` cannot be imported
+    there, so each case's day is held to `finding_origin`'s reading too."""
     session = record(finding, document=WAITING, started=datetime(2026, 9, 18, 9, 0))
     sent(session, datetime(2026, 9, 25, 9, 0), PRERUN, TURN, REGRADE)
     save_session(session, tmp_path / f"20260918-090000-{LABEL}" / SESSION_FILE_NAME)
 
     assert dates(tmp_path) == {key(finding): day}
+    before_any_turn = finding_origin(finding, session) in {"carried", "setup", "prerun"}
+    assert before_any_turn == (day == "2026-09-18")
 
 
 def test_a_check_agains_earlier_records_are_each_dated_by_the_day_they_ran(
