@@ -1705,3 +1705,10 @@ has no parse pin of its own, as before; it was parsed by hand at T102.
 - No C# or page file changed, so no C# gate, and no words changed. No SOLIDWORKS process, seat
   task, or paid or live test ran.
 - The whole suites on the final tree: recorded once they run.
+- *Done 2026-11-03, cycle 26 stacked on cycle 25:* the gates above ran on cycle 26 before it was
+  stacked on cycle 25 (002 Phase 40, T409 to T412, itself stacked on cycles 24 to 21 and on this
+  feature's cycle 20, R14). The two met in five files, records and the plan's pins, none of them a
+  script, words, C#, page or fixture file, and each kept both cycles' text, the lower cycle's first:
+  007's row is 95 / 8 / 0 at T100 and 98 / 5 / 0 at T103, R14 comes before this section and Phase 16
+  before Phase 17, and the backlog keeps cycle 19's item, resolved, before cycles 21 to 25's
+  sections. T103's sub-item of the stacking in [tasks.md](tasks.md) names each meeting.
