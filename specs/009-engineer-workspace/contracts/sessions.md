@@ -56,8 +56,10 @@ section 8).
 which is still writing its report and attention record is waited for first, up to 5 s (002
 [contracts/chat-api.md](../../002-task-pane-assistant/contracts/chat-api.md), its concurrency
 note), so `chat_state` is `running` only for a turn still running, or a settle past that bound,
-and section 5 item 6 does not open a stream past the `session.ended` the snapshot's `last_seq`
-already counts.
+and, but for a settle past that bound (or a snapshot taken in the few statements after the
+runner's `session.ended` and before a request waits, 002
+[research.md](../../002-task-pane-assistant/research.md) cycle 24), section 5 item 6 does not
+open a stream past the `session.ended` the snapshot's `last_seq` already counts.
 
 ## 4. The run folder
 
