@@ -7181,7 +7181,11 @@ the decision register now records 160A as done.
     triage keeps the note recorded first - the card says so after the reply's sentence, in the
     words file's `labels.note.not_kept`, "The note recorded first stays.", until its status is next
     written, as the record above a refusal lasts; with no labels, nothing. The page compares the
-    two notes and decides nothing: which note is kept stays the backend's rule.
+    two notes and decides nothing: which note is kept stays the backend's rule. *Added 2026-11-02
+    by a read-only check of the review's fixes:* with no labels the card draws no line, not even
+    an empty one, and the line and the status line it ends are wholly visible at a docked pane's
+    300 px, in the card's grouped row, as every other line FR-031 puts on a card; a fact pins
+    each (T368).
 - **Tests**: T364 and T366 in [tasks.md](tasks.md), Phase 31, each written first; T365 and T367
   make them green, and T368 closes the records.
 - **Built** (2026-11-02, T365 and T367): `dispositions._takes_a_late_triage` covers any decision
