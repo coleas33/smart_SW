@@ -7245,6 +7245,10 @@ the decision register now records 160A as done.
     ran.
   - *Changed 2026-11-02:* that tree came before the Tier 2 review's fixes, whose gates are T368's
     dated sub-items in [tasks.md](tasks.md).
+  - *Changed 2026-11-02:* the whole suites ran again on the final tree, after the review's fixes and
+    the read-only check's points: on `532a7131`, 18,866 passed and 5 skipped on Python 3.12.3 and
+    the same on 3.11; ruff clean; the identifier scan, 58 passed; C# with zero warnings, then 10,274
+    extractor and 4,342 add-in tests passed (T368's last sub-item).
 - **Review** (Tier 2, decision 180A; 2026-11-02): one review, one must-fix, each fix taken test
   first, as T368's dated sub-items record. The must-fix: a refused press filled the note box from
   the record, so a note the backend never read was erased - a press while a turn runs is refused
