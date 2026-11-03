@@ -2335,7 +2335,9 @@ def test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_rep
 
     *Changed 2026-11-02 on purpose (015 T123; cycle 12's Tier 1 review, point 4):* the re-run's
     `report.md` ends the earlier withdrawal's line marked as the earlier check run's, since its id
-    is that record's; the earlier record's own report names it as before."""
+    is that record's; the earlier record's own report names it as before. *And (point 2):* a
+    second Check again, after another restart, names it still, from the first re-run's own
+    `carried_withdrawals`, so a chain of Check agains keeps it."""
     review = chat.regraded_review(
         client, run_root / "FICT-recheck-withdrawn", ticked=False, answer="All bought"
     )
@@ -2373,6 +2375,69 @@ def test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_rep
         )
         assert decided.status_code == 200, decided.text
         assert chat.withdrawn_part(folder) == earlier
+
+    with restarted_app(run_root, settings) as again:
+        twice = recheck(again, folder)
+        assert twice.status_code == 201, twice.text
+
+    assert chat.withdrawn_part(folder) == earlier
+    assert chat.events_of(folder)[0]["body"].get("carried_withdrawals") == [withdrawal]
+
+
+def test_check_again_names_no_withdrawal_its_earlier_record_never_caught_up_with(
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    regrading_checks: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """015 T123 (cycle 12's Tier 1 review, point 3), a guard, through the routes: the earlier
+    stream ran ahead of its record. A waiting review's part-roles answer "All bought" withdrew the
+    pin's hygiene finding with the Accept recorded on it, and then the answer's close raised, so
+    the record on disk still holds the pin accepted beside a stream that withdrew it (002 T362's
+    rollback). Check again after a restart names no withdrawal - its `session.started` carries
+    none and its `report.md` has no "Withdrawn with a decision" part - and carries the Accept
+    whole onto the pin's finding, as the record held it."""
+    close_waiting = runner.ReviewRun.close_waiting
+
+    def refused_once_answered(run: runner.ReviewRun) -> ReviewSession:
+        """The opening's close as before; the answer's raises."""
+        if any(request.status == "answered" for request in run.session.evidence_requests):
+            raise OSError("FICT the run folder cannot be written")
+        return close_waiting(run)
+
+    monkeypatch.setattr(runner.ReviewRun, "close_waiting", refused_once_answered)
+    review = chat.regraded_review(
+        client,
+        run_root / "FICT-recheck-ran-ahead",
+        ticked=False,
+        answer="All bought",
+        settled=ChatState.FAILED,
+    )
+    folder = review.folder
+    assert [
+        event["body"]["finding_id"]
+        for event in chat.events_of(folder)
+        if event["type"] == "finding.withdrawn" and "taken" in event["body"]
+    ] == [review.pin]
+    [pin] = [
+        finding
+        for finding in load_session(folder / "session.json").findings
+        if finding.id == review.pin
+    ]
+    assert pin.disposition == Disposition.model_validate(review.decided[review.pin])
+    monkeypatch.setattr(runner.ReviewRun, "close_waiting", close_waiting)
+    settings = server_settings(provider_control, models, silent)
+    with restarted_app(run_root, settings) as fresh:
+        rechecked = recheck(fresh, folder)
+        assert rechecked.status_code == 201, rechecked.text
+
+    assert "carried_withdrawals" not in chat.events_of(folder)[0]["body"]
+    assert chat.withdrawn_part(folder) == []
+    saved = {finding.id: finding for finding in load_session(folder / "session.json").findings}
+    assert saved[finding_on(folder, pin)].disposition == pin.disposition
 
 
 def test_check_again_with_nothing_to_carry_writes_the_stream_and_report_of_before(
