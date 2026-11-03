@@ -35,7 +35,7 @@ from starlette.testclient import TestClient
 
 from swreview import atomic, tokens
 from swreview.agent import runner
-from swreview.agent.events import EventSink, own_stream
+from swreview.agent.events import EventSink, own_stream, replay_events
 from swreview.agent.providers import ProviderName
 from swreview.agent.providers.deferred import DeferredProvider
 from swreview.agent.runner import request_prefix
@@ -67,7 +67,7 @@ from swreview.report.session import (
     load_session,
     save_session,
 )
-from swreview.report.snapshot import restored_snapshot
+from swreview.report.snapshot import cleared_lines, restored_snapshot
 from tests.support.contracts import contract_validator
 from tests.support.prerun import LIVE_ROWS, live_prerun_package, prerun_package
 from tests.support.questions_package import build_questions_package
@@ -2023,6 +2023,334 @@ def test_two_earlier_decisions_meeting_one_finding_carry_neither_and_name_each(
             ])
         )
     ]
+
+
+# --- what the earlier record said of decisions already gone (015 cycle 12) --------------------
+#
+# Owner decision 193A's line, extended to Check again (015 T121; FR-029): the carry reads the
+# earlier record's own stream and keeps each undecided finding's cleared line on the finding it
+# re-raises, and the re-run's `report.md` names the earlier record's withdrawals with a decision.
+
+EARLIER_ID = UUID(int=12)
+"""The earlier record's own session in the runner-level cases (`bare` copies the run's)."""
+
+
+def earlier_stream(
+    run: runner.ReviewRun, earlier: ReviewSession, *written: tuple[str, dict[str, Any]]
+) -> None:
+    """`earlier` given a session of its own, and its stream as a re-run's rotation leaves it,
+    `events.1.jsonl` beside the run's: its `session.started`, then `written`."""
+    earlier.session_id = EARLIER_ID
+    sink = EventSink(run.out_dir / "events.1.jsonl")
+    sink.emit("session.started", {"session_id": str(EARLIER_ID)})
+    for kind, body in written:
+        sink.emit(kind, body)
+
+
+def cleared_on(
+    finding_id: str, disposition: Disposition, reason: str, **tally: int
+) -> tuple[str, dict[str, Any]]:
+    """A `disposition.cleared` an earlier clear wrote on `finding_id`, with its tally when one was
+    recorded."""
+    return (
+        "disposition.cleared",
+        {
+            "finding_id": finding_id,
+            "disposition": disposition.model_dump(mode="json"),
+            "reason": reason,
+            **({"triage_tally": tally_body(**tally)} if tally else {}),
+        },
+    )
+
+
+def test_the_carry_keeps_an_undecided_findings_cleared_line_on_the_finding_it_lands_on(
+    bare: Any,
+) -> None:
+    """015 T121 (owner decision 193A, extended to Check again; FR-029): on the earlier record a
+    restate cleared F-007's Accept, recorded as `already_known`, and F-007 stayed undecided, so its
+    card said so. The re-run's F-001 says what F-007 said, so the carry writes F-007's last line,
+    read from the earlier record's own stream, onto F-001: its disposition and words as they were,
+    with the review's tally in place of the earlier one - none, since no triage is carried yet -
+    and before F-008's Reject is carried onto F-002. The line is valid against the events contract,
+    the re-run's own stream names it for F-001 as a snapshot reads it, and `coverage.recheck`
+    names nothing."""
+    run, earlier, events = bare
+    run.session.findings[:] = [coaxial("F-001", "hol:0001"), coaxial("F-002", "hol:0002")]
+    earlier.findings[:] = [coaxial("F-007", "hol:0001"), coaxial("F-008", "hol:0002", "rejected")]
+    accepted = decided_with(coaxial("F-007", "hol:0001"), "accepted", "already_known").disposition
+    rejected = earlier.findings[1].disposition
+    assert accepted is not None and rejected is not None
+    earlier_stream(
+        run,
+        earlier,
+        cleared_on("F-007", accepted, "FICT the first line on F-007", known=1),
+        cleared_on("F-007", accepted, chat.RESTATED_LINE, not_recorded=2),
+    )
+
+    run.carry_from(earlier)
+
+    line = {
+        "finding_id": "F-001",
+        "disposition": accepted.model_dump(mode="json"),
+        "reason": chat.RESTATED_LINE,
+    }
+    said = [(kind, body) for kind, body in events if kind.startswith("disposition")]
+    assert said == [
+        ("disposition.cleared", line),
+        ("disposition", {"finding_id": "F-002", "disposition": rejected.model_dump(mode="json")}),
+    ]
+    contract_validator("chat-events.schema.json").validate(
+        {"seq": 1, "at": "2026-11-02T09:00:00+00:00", "type": "disposition.cleared", "body": line}
+    )
+    assert run.session.findings[0].disposition is None
+    assert cleared_lines(run.session, replay_events(run.out_dir / "events.jsonl")) == [line]
+    assert recheck_row(run.session) == []
+
+
+def test_a_line_whose_finding_is_decided_since_or_not_raised_once_is_not_carried(
+    bare: Any,
+) -> None:
+    """015 T121: the carry keeps a line only where its card would show it. The re-run raises
+    nothing F-007 said, and twice what F-008 said (F-002 and F-003); F-009's line was ended by the
+    Reject recorded after it, which is carried onto F-004 as any decision is. None of the three
+    lines reaches the new stream, and `coverage.recheck` names none of them: a line holds no
+    decision of the engineer's to lose."""
+    run, earlier, events = bare
+    run.session.findings[:] = [
+        coaxial("F-002", "hol:0002"),
+        coaxial("F-003", "hol:0002"),
+        coaxial("F-004", "hol:0004"),
+    ]
+    earlier.findings[:] = [
+        coaxial("F-007", "hol:0001"),
+        coaxial("F-008", "hol:0002"),
+        coaxial("F-009", "hol:0004", "rejected"),
+    ]
+    accepted = decided_with(coaxial("F-007", "hol:0001"), "accepted", "already_known").disposition
+    rejected = earlier.findings[2].disposition
+    assert accepted is not None and rejected is not None
+    earlier_stream(
+        run,
+        earlier,
+        *(
+            cleared_on(finding_id, accepted, chat.RESTATED_LINE)
+            for finding_id in ("F-007", "F-008", "F-009")
+        ),
+        ("disposition", {"finding_id": "F-009", "disposition": rejected.model_dump(mode="json")}),
+    )
+
+    run.carry_from(earlier)
+
+    said = [(kind, body) for kind, body in events if kind.startswith("disposition")]
+    assert said == [
+        ("disposition", {"finding_id": "F-004", "disposition": rejected.model_dump(mode="json")})
+    ]
+    assert recheck_row(run.session) == []
+
+
+def test_the_carrys_own_line_follows_a_carried_one_and_is_shown(bare: Any) -> None:
+    """015 T121: two earlier findings said what F-001 says - F-007, undecided, its Reject cleared
+    by a restate, and F-008, accepted at medium. F-001 is high, so F-008's Accept is not carried
+    and the carry writes its own line (owner decision 194A). F-007's line is carried first, so the
+    carry's own, about the verdict as it now stands, is F-001's last line, the one its card and
+    both snapshots show."""
+    run, earlier, events = bare
+    run.session.findings[:] = [coaxial("F-001", "hol:0001").model_copy(update={"severity": "high"})]
+    medium = coaxial("F-007", "hol:0001").model_copy(update={"severity": "medium"})
+    earlier.findings[:] = [
+        medium,
+        decided_with(medium.model_copy(update={"id": "F-008"}), "accepted", "already_known"),
+    ]
+    restated = decided_with(medium, "rejected", "wrong").disposition
+    left = earlier.findings[1].disposition
+    assert restated is not None and left is not None
+    earlier_stream(run, earlier, cleared_on("F-007", restated, chat.RESTATED_LINE))
+
+    run.carry_from(earlier)
+
+    carried = {
+        "finding_id": "F-001",
+        "disposition": restated.model_dump(mode="json"),
+        "reason": chat.RESTATED_LINE,
+    }
+    own = {
+        "finding_id": "F-001",
+        "disposition": left.model_dump(mode="json"),
+        "reason": carried_line("Accept", "real but already known"),
+    }
+    said = [(kind, body) for kind, body in events if kind.startswith("disposition")]
+    assert said == [("disposition.cleared", carried), ("disposition.cleared", own)]
+    assert cleared_lines(run.session, replay_events(run.out_dir / "events.jsonl")) == [own]
+
+
+def finding_on(folder: Path, earlier: Finding) -> str:
+    """The id of the one finding of `folder`'s record that says what `earlier` said."""
+    [found] = [
+        finding.id
+        for finding in load_session(folder / "session.json").findings
+        if finding_subject_key(finding) == finding_subject_key(earlier)
+    ]
+    return found
+
+
+def test_check_again_keeps_the_line_a_restate_left_in_every_view_until_a_decision(
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    regrading_checks: None,
+) -> None:
+    """015 T121 (owner decision 193A, extended to Check again; FR-029), through the routes: a
+    waiting review's part-roles answer restated the pin's hygiene finding medium where its Accept
+    was recorded low, so the Accept was cleared and the pin's card said so. Check again after a
+    restart re-raises the pin's finding and keeps the line on it: the new chat's snapshot, the
+    `report.md` the re-run wrote and a restarted backend's restore each name the restate's line,
+    as the earlier record did. A second Check again keeps it once more, from the first re-run's own
+    stream, and a decision on that chat then ends it, in its snapshot and in `report.md`."""
+    review = chat.regraded_review(client, run_root / "FICT-recheck-keeps-line", ticked=False)
+    folder = review.folder
+    [pin] = [
+        finding
+        for finding in load_session(folder / "session.json").findings
+        if finding.id == review.pin
+    ]
+    settings = server_settings(provider_control, models, silent)
+    with restarted_app(run_root, settings) as fresh:
+        rechecked = recheck(fresh, folder)
+        assert rechecked.status_code == 201, rechecked.text
+        line = {**review.line, "finding_id": finding_on(folder, pin)}
+        snapshot = fresh.get(f"/sessions/{rechecked.json()['chat_id']}/snapshot")
+        assert snapshot.status_code == 200, snapshot.text
+        assert snapshot.json().get("cleared") == [line]
+        report = (folder / "report.md").read_text(encoding="utf-8").splitlines()
+        assert chat.reported_disposition(report, line["finding_id"], 2) == [
+            *chat.UNDECIDED_LINES,
+            f"  - cleared: {chat.RESTATED_LINE}",
+        ]
+
+    with restarted_app(run_root, settings) as again:
+        restored = again.get(f"/reviews/{folder.name}")
+        assert restored.status_code == 200, restored.text
+        assert restored.json().get("cleared") == [line]
+        twice = recheck(again, folder)
+        assert twice.status_code == 201, twice.text
+        target = finding_on(folder, pin)
+        chat_id = twice.json()["chat_id"]
+        assert again.get(f"/sessions/{chat_id}/snapshot").json().get("cleared") == [
+            {**line, "finding_id": target}
+        ]
+        decided = again.post(
+            f"/sessions/{chat_id}/findings/{target}/disposition",
+            json={"decision": "rejected", "note": "FICT decided again"},
+        )
+        assert decided.status_code == 200, decided.text
+        assert "cleared" not in again.get(f"/sessions/{chat_id}/snapshot").json()
+        report = (folder / "report.md").read_text(encoding="utf-8").splitlines()
+        assert chat.reported_disposition(report, target, 2) == [
+            "- Disposition:",
+            "  - decision: rejected",
+        ]
+        assert not [entry for entry in report if entry.startswith("  - cleared: ")]
+
+
+def test_check_again_names_the_earlier_records_withdrawal_with_a_decision_in_report_md(
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    regrading_checks: None,
+) -> None:
+    """015 T121 (FR-029; 002's H-g-010, its *Left open*), through the routes: a waiting review's
+    part-roles answer "All bought" withdrew the pin's hygiene finding with the Accept recorded on
+    it, and its `report.md` names that withdrawal under "Withdrawn with a decision". Check again
+    after a restart withdraws its own pin findings undecided, naming nothing, and its `report.md`
+    names the earlier withdrawal, worded the same, from the re-run's own stream: its
+    `session.started` carries the earlier body, valid against the events contract. The report a
+    later decision renders names it still."""
+    review = chat.regraded_review(
+        client, run_root / "FICT-recheck-withdrawn", ticked=False, answer="All bought"
+    )
+    folder = review.folder
+    [withdrawal] = [
+        event["body"]
+        for event in chat.events_of(folder)
+        if event["type"] == "finding.withdrawn" and "taken" in event["body"]
+    ]
+    named = [f"- {review.pin} withdrawn: {withdrawal['reason']}; {withdrawal['taken']}"]
+    assert chat.withdrawn_part(folder) == named
+    settings = server_settings(provider_control, models, silent)
+    with restarted_app(run_root, settings) as fresh:
+        rechecked = recheck(fresh, folder)
+        assert rechecked.status_code == 201, rechecked.text
+
+        assert chat.withdrawn_part(folder) == named
+        events = chat.events_of(folder)
+        assert events[0]["body"].get("carried_withdrawals") == [withdrawal]
+        contract_validator("chat-events.schema.json").validate(events[0])
+        assert not [
+            event
+            for event in events
+            if event["type"] == "finding.withdrawn" and "taken" in event["body"]
+        ]
+        later = next(
+            finding.id
+            for finding in load_session(folder / "session.json").findings
+            if finding.disposition is None
+        )
+        decided = fresh.post(
+            f"/sessions/{rechecked.json()['chat_id']}/findings/{later}/disposition",
+            json={"decision": "rejected", "note": "FICT not here"},
+        )
+        assert decided.status_code == 200, decided.text
+        assert chat.withdrawn_part(folder) == named
+
+
+def test_check_again_with_nothing_to_carry_writes_the_stream_and_report_of_before(
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    regrading_checks: None,
+) -> None:
+    """015 T121, a guard (FR-029: a re-run whose earlier record holds neither writes what it wrote
+    before): the earlier record's stream holds the restate's line on the pin, ended by the Reject
+    recorded after it, and the folds' withdrawals, which name nothing. Check again carries the
+    Reject and the plate's Accept, and nothing else: its stream holds no `disposition.cleared`, its
+    `session.started` the keys a re-run's start has always had, and its `report.md` the bytes of
+    the report rendered with no stream at all. The pane fixtures' re-run, regenerated, keeps its
+    bytes too (`test_pane_waiting_fixtures.py`)."""
+    review = chat.regraded_review(client, run_root / "FICT-recheck-nothing", ticked=False)
+    folder = review.folder
+    decided = client.post(
+        f"/sessions/{review.chat_id}/findings/{review.pin}/disposition",
+        json={"decision": "rejected", "note": "FICT decided again"},
+    )
+    assert decided.status_code == 200, decided.text
+    earlier = chat.events_of(folder)
+    cleared = [event["body"] for event in earlier if event["type"] == "disposition.cleared"]
+    assert [body["finding_id"] for body in cleared] == [review.pin]
+    assert [event for event in earlier if "folded_into" in event["body"]]
+    settings = server_settings(provider_control, models, silent)
+    with restarted_app(run_root, settings) as fresh:
+        rechecked = recheck(fresh, folder)
+        assert rechecked.status_code == 201, rechecked.text
+
+    events = chat.events_of(folder)
+    assert not [event for event in events if event["type"] == "disposition.cleared"]
+    assert set(events[0]["body"]) == {
+        "session_id", "package_id", "provider", "model", "effort_mapping", "send_when_checked",
+    }
+    session = load_session(folder / "session.json")
+    assert sorted(
+        finding.disposition.decision for finding in session.findings if finding.disposition
+    ) == ["accepted", "rejected"]
+    package = load_package(folder).package
+    assert (folder / "report.md").read_text(encoding="utf-8") == render_report(
+        session, package, ranking=rank(session)
+    )
 
 
 def _request(request_id: str, question: str, *, answer: str | None = None) -> EvidenceRequest:
