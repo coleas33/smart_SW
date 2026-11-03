@@ -461,7 +461,7 @@ if (-not $runs) { $runs = Join-Path ([Environment]::GetFolderPath('MyDocuments')
 function Show-ReviewFacts {
     param([string] $run)
     $run = $run.TrimEnd('\')
-    Push-Location "$R\reviewer"
+    Push-Location -LiteralPath "$R\reviewer"
     try { uv run python -c "import sys, json; from pathlib import Path; from datetime import datetime; from swreview.ir.loader import load_package; from swreview.report.session import load_session; from swreview.report.summary import drawings_of; from swreview.tools.checks_interference import groups_of; r = Path(sys.argv[1]); s = load_session(r / 'session.json'); p = load_package(r).package; ev = [json.loads(x) for x in (r / 'events.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]; us = [e for e in ev if e['type'] == 'usage']; first = us[0]['seq'] if us else 10**9; pre = [e['body']['tool'] for e in ev if e['type'] == 'tool.started' and e['seq'] < first]; later = [e['body']['tool'] for e in ev if e['type'] == 'tool.started' and e['seq'] > first]; keys = {g.group_key for g in groups_of(p)}; judged = {st.arguments.get('group_key') for st in s.steps if st.tool == 'check_interference_group'}; t = s.usage.totals if s.usage else None; print('tokens: input', t and t.input_tokens, '| cached', t and t.cached_input_tokens, '| uncached', t and t.uncached_input_tokens, '| rounds', s.usage and s.usage.rounds, '| turns', s.usage and s.usage.turns); print('findings', len(s.findings), '| contacts', len(s.contacts or []), '| interference rows in package.json', len(p.interferences), '| gaps', len(p.gaps)); print('interference groups', len(keys), '| judged', len(keys & judged), '| not judged', len(keys - judged)); print('pre-run tools:', ', '.join(dict.fromkeys(pre)) or 'none'); print('pre-run tools called again after the first model round:', ', '.join(sorted(set(pre) & set(later))) or 'none'); d = {x.name: x for x in p.extractor.phases}.get('drawing'); print('drawing phase:', (d.status + ('' if d.elapsed_ms is None else ' ' + str(d.elapsed_ms) + ' ms')) if d else 'not recorded'); dl = drawings_of(p); print('drawings line:', dl.text if dl else 'none'); ers = s.evidence_requests; print('questions: asked', len(ers), '| answered', sum(x.status == 'answered' for x in ers)); ans = [e['seq'] for e in ev if e['type'] == 'evidence.answered']; ends = [e['seq'] for e in ev if e['type'] == 'turn.ended']; print('answers sent', len(ans), '| turns ended between the first and last answer', sum(ans[0] < x < ans[-1] for x in ends) if ans else 0, '| turns ended after the last answer', sum(x > ans[-1] for x in ends) if ans else 0, '| first round input after the answers', next((e['body']['input_tokens'] for e in us if ans and e['seq'] > ans[-1]), None)); f = lambda a: datetime.fromisoformat(a.replace('Z', '+00:00')); st = next(e['at'] for e in ev if e['type'] == 'session.started'); td = next((e['at'] for e in ev if e['type'] == 'text.delta'), None); print('seconds from session.started to the first text.delta:', round((f(td) - f(st)).total_seconds(), 1) if td else 'no text.delta')" $run }
     finally { Pop-Location }
 }
@@ -469,7 +469,7 @@ function Show-ReviewFacts {
 function Show-SmokeFacts {
     param([string] $run)
     $run = $run.TrimEnd('\')
-    Push-Location "$R\reviewer"
+    Push-Location -LiteralPath "$R\reviewer"
     try { uv run python -c "import sys, json; from pathlib import Path; from swreview.report.attention_record import read_attention_record, StaleAttentionRecord; from swreview.checks.standards.registry import RULES; from swreview.checks.standards.report import PROFILE_LIMIT, stamped_profile_digest; r = Path(sys.argv[1]); s = json.loads((r / 'session.json').read_text(encoding='utf-8')); ev = [json.loads(line) for line in (r / 'events.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]; us = [e['body'] for e in ev if e['type'] == 'usage']; print('usage events', len(us), '| with served_model', sum(bool(b.get('served_model')) for b in us), '| served models', sorted({b['served_model'] for b in us if b.get('served_model')})); print('bodies with a retries field', sum('retries' in e['body'] for e in ev)); print('origin_marks', s.get('origin_marks', 'absent')); fs = [f for f in s.get('findings', []) if f.get('check') in RULES]; prefix, _, tail = PROFILE_LIMIT.partition('{name}'); names = [[lim.removeprefix(prefix).removesuffix(tail.format(sha256=dg)) for lim in f.get('coverage_limits', []) if (dg := stamped_profile_digest([lim])) is not None] for f in fs]; print('standards findings', len(fs), '| with a profile stamp', sum(any(row) for row in names), '| stamps naming a folder', sum('/' in name or chr(92) in name for row in names for name in row)); a = r / 'attention.json'; data = None; record = None; failure = None; stale = False; exec('try:\n    data = a.read_bytes()\n    record = read_attention_record(r)\nexcept (OSError, ValueError) as exc:\n    failure = type(exc).__name__\n    stale = isinstance(exc, StaleAttentionRecord)'); crlf = data.count(bytes([13, 10])) if data is not None else 0; state = 'stale' if stale else 'unreadable' if failure else 'reads as this session\'s record'; print('attention.json:', 'missing' if data is None else 'CRLF lines ' + str(crlf) if crlf else 'LF', '|', state, '| rows', len(record.rows) if record is not None else '-', *(['|', failure] if failure else [])); print('prompts.json:', 'present' if (r / 'prompts.json').exists() else 'absent')" $run }
     finally { Pop-Location }
 }
@@ -477,7 +477,7 @@ function Show-SmokeFacts {
 function Show-DumpFacts {
     param([string] $folder)
     $folder = $folder.TrimEnd('\')
-    Push-Location "$R\reviewer"
+    Push-Location -LiteralPath "$R\reviewer"
     try { uv run python -c "import sys; from collections import Counter; from swreview.ir.loader import load_package; from swreview.checks.fastener_identity import recognise_fasteners; p = load_package(sys.argv[1]).package; d = p.documents; print('documents', len(d), '| mass_overridden read', sum(x.mass_overridden is not None for x in d), '| mass_override gaps', sum(g.entity_kind == 'mass_override' for g in p.gaps)); w = [h for h in p.holes if h.wizard is not None]; print('holes', len(p.holes), '| Hole.wizard filled', len(w), '| fit classes', sorted({h.wizard.fit_class_raw for h in w if h.wizard.fit_class_raw}), '| thread classes', sorted({h.wizard.thread_class_raw for h in w if h.wizard.thread_class_raw})); print('model_dimensions', len(p.model_dimensions), '| model_annotations', len(p.model_annotations)); r = recognise_fasteners(p); print('fasteners', len(p.fasteners), dict(Counter(f.identity_source for f in p.fasteners)), '| with a shank face', sum(x.shank_face_id is not None for x in r))" $folder }
     finally { Pop-Location }
 }
@@ -485,7 +485,7 @@ function Show-DumpFacts {
 function Show-Documents {
     param([string] $run)
     $run = $run.TrimEnd('\')
-    Push-Location "$R\reviewer"
+    Push-Location -LiteralPath "$R\reviewer"
     try { uv run python -c "import sys; from swreview.ir.loader import load_package; p = load_package(sys.argv[1]).package; [print(d.document_id, d.kind, d.file_name) for d in p.documents]" $run }
     finally { Pop-Location }
 }
@@ -493,7 +493,7 @@ function Show-Documents {
 function Show-DrawingTables {
     param([string] $run)
     $run = $run.TrimEnd('\')
-    Push-Location "$R\reviewer"
+    Push-Location -LiteralPath "$R\reviewer"
     try { uv run python -c "import sys; from swreview.ir.loader import load_package; p = load_package(sys.argv[1]).package; [print(r.document_id, 'sheet', s.index + 1, '| revision tables', len(s.revision_tables), '| other tables', len(s.tables), '| bills of materials', sum(1 for x in s.tables if x.bom_rows)) for r in p.drawing_records for s in r.sheets]" $run }
     finally { Pop-Location }
 }
@@ -501,8 +501,9 @@ function Show-DrawingTables {
 function Show-SetupTime {
     param([string] $run)
     $run = $run.TrimEnd('\')
-    $started = [DateTimeOffset]((Get-Content "$run\events.jsonl" -TotalCount 1 | ConvertFrom-Json).at)
-    $created = Select-String -Path "$env:LOCALAPPDATA\SwReview\logs\backend-*.log" -SimpleMatch '"POST /sessions HTTP/1.1" 201' |
+    $started = [DateTimeOffset]((Get-Content -LiteralPath "$run\events.jsonl" -TotalCount 1 | ConvertFrom-Json).at)
+    $created = Get-ChildItem -LiteralPath "$env:LOCALAPPDATA\SwReview\logs" -Filter 'backend-*.log' |
+        Select-String -SimpleMatch '"POST /sessions HTTP/1.1" 201' |
         ForEach-Object { [DateTimeOffset]$_.Line.Substring(1, $_.Line.IndexOf(']') - 1) } |
         Where-Object { $_ -ge $started } | Sort-Object | Select-Object -First 1
     if ($created) { 'setup, from session.started to the 201 answer to POST /sessions: {0:N1} s' -f ($created - $started).TotalSeconds }
@@ -535,7 +536,8 @@ function Save-TimingNote {
 }
 
 function Show-DrawingReadLog {
-    Select-String -Path "$env:LOCALAPPDATA\SwReview\logs\tool-service-*.log" -SimpleMatch 'command=drawing.read' |
+    Get-ChildItem -LiteralPath "$env:LOCALAPPDATA\SwReview\logs" -Filter 'tool-service-*.log' |
+        Select-String -SimpleMatch 'command=drawing.read' |
         Select-Object -Last 3 | ForEach-Object { $_.Line }
 }
 
@@ -564,8 +566,8 @@ function Get-SeatHash {
 
 function Save-Fingerprint {
     param([string] $name)
-    $paths = @(Get-Content "$H\notes\paths.txt" -ErrorAction SilentlyContinue | ForEach-Object { $_.Trim().Trim('"') } | Where-Object { $_ })
-    foreach ($package in @(Get-ChildItem "$H\dumps" -Filter package.json -Recurse -ErrorAction SilentlyContinue)) {
+    $paths = @(Get-Content -LiteralPath "$H\notes\paths.txt" -ErrorAction SilentlyContinue | ForEach-Object { $_.Trim().Trim('"') } | Where-Object { $_ })
+    foreach ($package in @(Get-ChildItem -LiteralPath "$H\dumps" -Filter package.json -Recurse -ErrorAction SilentlyContinue)) {
         $paths += @(Select-String -LiteralPath $package.FullName -Pattern '"path":\s*"([^"]+)"' -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { [regex]::Unescape($_.Groups[1].Value) } | Where-Object { $_ -match '\.(sldprt|sldasm|slddrw)$' })
     }
     $rows = @(foreach ($path in @($paths | Sort-Object -Unique)) {
@@ -576,16 +578,16 @@ function Save-Fingerprint {
         }
         else { [pscustomobject]@{ Path = $path; Length = ''; Written = ''; ReadOnly = ''; SHA256 = 'missing' } }
     })
-    $rows | Export-Csv "$H\notes\fingerprint-$name.csv" -NoTypeInformation -Encoding UTF8
+    $rows | Export-Csv -LiteralPath "$H\notes\fingerprint-$name.csv" -NoTypeInformation -Encoding UTF8
     "fingerprint-$name`: $($rows.Count) files, $(@($rows | Where-Object SHA256 -eq 'missing').Count) missing, $(@($rows | Where-Object SHA256 -eq 'unreadable').Count) unreadable, $(@($rows | Where-Object ReadOnly -eq $false).Count) writable"
 }
 
 function Compare-Fingerprint {
     param([string] $name)
     $before = @{}
-    foreach ($row in @(Import-Csv "$H\notes\fingerprint-before.csv")) { $before[$row.Path] = $row }
+    foreach ($row in @(Import-Csv -LiteralPath "$H\notes\fingerprint-before.csv")) { $before[$row.Path] = $row }
     $changed = @(); $compared = 0; $notCompared = 0
-    foreach ($row in @(Import-Csv "$H\notes\fingerprint-$name.csv")) {
+    foreach ($row in @(Import-Csv -LiteralPath "$H\notes\fingerprint-$name.csv")) {
         $old = $before[$row.Path]
         if (-not $old -or $old.SHA256 -eq 'missing' -or $row.SHA256 -eq 'missing') { $notCompared++; continue }
         $compared++
@@ -600,7 +602,7 @@ function Show-RemodelLedger {
     param([string] $folder)
     $ledgers = @(Get-ChildItem -LiteralPath "$($folder.TrimEnd('\'))\capabilities" -Filter 'remodel-*.yaml' -ErrorAction SilentlyContinue)
     if ($ledgers.Count -eq 0) { 'no answers file in this folder: the run did not finish'; return }
-    Push-Location "$R\reviewer"
+    Push-Location -LiteralPath "$R\reviewer"
     try { foreach ($ledger in $ledgers) { uv run swreview remodel ledger $ledger.FullName } }
     finally { Pop-Location }
 }
