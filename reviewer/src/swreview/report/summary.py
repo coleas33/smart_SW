@@ -385,6 +385,9 @@ class WithdrawnWords(ReviewModel):
 
     took: str
     took_with_triage: str
+    earlier: str
+    """What ends `report.md`'s line for each of a re-run's earlier record's withdrawals (Check
+    again, feature 015), whose id is that record's (015 cycle 12's Tier 1 review)."""
 
     def of(self, decision: str, triage: str | None) -> str:
         """The clause for the withdrawn `decision`, its noun ("Reject"), naming `triage`, its word,

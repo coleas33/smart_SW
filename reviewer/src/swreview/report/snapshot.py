@@ -43,6 +43,7 @@ if TYPE_CHECKING:  # pragma: no cover - imported for annotations only
 __all__ = [
     "CARRIED_WITHDRAWALS",
     "WAITING_STATES",
+    "carried_withdrawals",
     "cleared_lines",
     "restored_snapshot",
     "review_snapshot",
@@ -58,7 +59,7 @@ WHEN_FORMAT = "%Y-%m-%d %H:%M"
 
 CARRIED_WITHDRAWALS = "carried_withdrawals"
 """The `session.started` key under which a re-run (Check again, feature 015) names its earlier
-record's withdrawals with a decision, as `withdrawn_lines` read them there (015 cycle 12)."""
+record's withdrawals with a decision, as `carried_withdrawals` reads them there (015 cycle 12)."""
 
 
 def review_snapshot(
@@ -169,25 +170,28 @@ def withdrawn_lines(session: ReviewSession, events: Iterable[AgentEvent]) -> lis
     since `answer_evidence_batch` then reloads the record from disk and `_play` renders from it.
     A body whose finding the session still holds is skipped, so the report names no withdrawal
     its record has not caught up with (cycle 10's Tier 2 review, and a read-only check of its
-    fixes).
-
-    A re-run (Check again, feature 015) writes a stream of its own, so its `session.started` names
-    its earlier record's withdrawals with a decision (`CARRIED_WITHDRAWALS`), and they come first,
-    as they went. Their ids are the earlier record's, which the re-run may have given another
-    finding, so the held-id skip is not theirs (015 cycle 12)."""
-    read = _own_events(session, events)
+    fixes)."""
     held = {finding.id for finding in session.findings}
-    carried = read[0].body.get(CARRIED_WITHDRAWALS, []) if read else []
     return [
-        *(dict(body) for body in carried),
-        *(
-            dict(event.body)
-            for event in read
-            if event.type == "finding.withdrawn"
-            and "taken" in event.body
-            and event.body.get("finding_id") not in held
-        ),
+        dict(event.body)
+        for event in _own_events(session, events)
+        if event.type == "finding.withdrawn"
+        and "taken" in event.body
+        and event.body.get("finding_id") not in held
     ]
+
+
+def carried_withdrawals(
+    session: ReviewSession, events: Iterable[AgentEvent]
+) -> list[dict[str, Any]]:
+    """The earlier record's withdrawals with a decision that a re-run's (Check again, feature 015)
+    `session.started` names (`CARRIED_WITHDRAWALS`), as they went; none for any other session.
+    `report.md` names them before the session's own (`withdrawn_lines`), each marked as the
+    earlier check run's: their ids are that record's, which the re-run may have given another
+    finding, so `withdrawn_lines`' held-id skip is not theirs (015 cycle 12 and its Tier 1
+    review)."""
+    read = _own_events(session, events)
+    return [dict(body) for body in read[0].body.get(CARRIED_WITHDRAWALS, [])] if read else []
 
 
 def _own_events(session: ReviewSession, events: Iterable[AgentEvent]) -> list[AgentEvent]:
