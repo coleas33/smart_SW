@@ -77,6 +77,8 @@ namespace SwReview.AddIn.Tests;
 /// backend never read its note, so the retry posts it. And when a reply keeps the note recorded first in place of another,
 /// non-blank one the press sent - a late triage keeps it - the card says so after the reply's sentence, in the backend's words
 /// (`labels.note`), until its status is next written.
+/// *Added 2026-11-02 (002 T368; a read-only check of those fixes):* with no labels the card says nothing of the note, and the
+/// line is wholly visible at a docked pane's 300 px, in its grouped row.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -1895,6 +1897,73 @@ public sealed class ReviewPageTriageTests
     }
 
     /// <summary>
+    /// A read-only check of cycle 11's Tier 2 fixes (002 T368), a guard, FR-030: with no labels there are no words for a note
+    /// not kept, so the card says nothing of it - no line, not even an empty one - and its status line is the reply's sentence
+    /// alone, the triage's token in it. F-001 is deferred with a note and no triage; the engineer edits the note, picks
+    /// `new_and_real` and presses Defer again, and the reply keeps the Defer's note, as in
+    /// <see cref="ALateTriageThatKeepsTheNoteRecordedFirstSaysSo"/>.
+    /// </summary>
+    [Fact]
+    public void WithNoLabelsALateTriageThatKeepsTheNoteRecordedFirstSaysNothingOfIt()
+    {
+        ReviewPageDriver.Run(null, async driver =>
+        {
+            const string Kept = "FICT first shown at an earlier sitting";
+            const string Edited = "FICT first shown at the sitting before this one";
+            await Reviewed(driver, Finding("F-001", Disposition("deferred", Kept, null)));
+            await driver.Route("POST", DispositionPath("F-001"), 200, Finding("F-001", Disposition("deferred", Kept, "new_and_real")));
+            await Note(driver, "F-001", Edited);
+            await driver.ClearCalls();
+            await Press(driver, "F-001", "new_and_real");
+            await Decide(driver, "F-001", "defer");
+
+            Assert.Equal("decision=deferred, note=" + Edited + ", triage=new_and_real", Body(Assert.Single(await DispositionCalls(driver))));
+            JsonElement late = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(JsonValueKind.Null, late.GetProperty("noteKept").ValueKind);
+            Assert.Equal(
+                "Disposition: deferred (new_and_real) by " + Engineer + " at " + RecordedAt + " - " + Kept,
+                late.GetProperty("status").GetString());
+            Assert.Equal(Kept, await NoteBox(driver, "F-001"));
+        });
+    }
+
+    /// <summary>
+    /// A read-only check of cycle 11's Tier 2 fixes (002 T368), at a docked pane's 300 px, the card where a real turn leaves it:
+    /// the session's end reads the ranking, which puts F-007's card in its grouped row, shut. F-007 is deferred with a note and
+    /// no triage, and a late triage sent with the note edited keeps the Defer's. With the row and the fold opened, the card's
+    /// status line - the reply's sentence and the line saying the first note stays - the line itself and every triage button
+    /// are whole - inside the window and every box that clips them, their words inside them - with no sideways page scroll, as
+    /// every other line FR-031 puts on a card is.
+    /// </summary>
+    [Fact]
+    public void ANoteNotKeptLineIsWhollyVisibleAtThreeHundredPixelsInItsRow()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            const string Kept = "FICT first shown at an earlier sitting";
+            await ReviewPageSummaryAcceptanceTests.NarrowPane(driver);
+            await driver.RouteAttention(Chat, SummarySample.Json());
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-007", Disposition("deferred", Kept, null)));
+            await driver.EndSession(Chat);
+            JsonElement placed = await driver.Read(ReadRow("F-007"));
+            Assert.True(placed.GetProperty("inRow").GetBoolean(), "F-007's card is not in its grouped row.");
+            Assert.False(placed.GetProperty("rowOpen").GetBoolean(), "F-007's row is open before the press.");
+            await driver.Route("POST", DispositionPath("F-007"), 200, Finding("F-007", Disposition("deferred", Kept, "new_and_real")));
+            await Note(driver, "F-007", "FICT first shown at the sitting before this one");
+            await Press(driver, "F-007", "new_and_real");
+            await Decide(driver, "F-007", "defer");
+
+            JsonElement measured = await driver.Read(ReadNoteKeptWhole("F-007"));
+            Assert.Equal(300, measured.GetProperty("width").GetInt32());
+            Assert.True(measured.GetProperty("foldOpen").GetBoolean(), "the finding's fold did not open.");
+            Assert.Equal(6, measured.GetProperty("count").GetInt32());
+            Assert.Empty(ReviewPageDriver.Strings(measured, "clipped"));
+            Assert.True(measured.GetProperty("noHorizontalOverflow").GetBoolean(), measured.ToString());
+        });
+    }
+
+    /// <summary>
     /// A read-only check of cycle 9's Tier 2 fixes, a guard: a switch from a live review to a read-only restore draws every
     /// card's line again in the read-only words, since the page reads `state.readOnly` when it draws a card and sets it before
     /// a restore draws them. Chat-1 is live: its F-001 Accept, F-002 Reject and F-003 Defer, each recorded without a triage,
@@ -2606,6 +2675,20 @@ var parts = [
   ['record', status.querySelector('.card-record')],
   ['refusal', status.querySelector('.plain-error-text')],
   ['details', status.querySelector('.error-fold > summary')]
+];");
+
+    /// <summary>
+    /// After a late triage that kept the note recorded first (cycle 11's Tier 2 review): opens the grouped row one card stands
+    /// in, then measures the card's status line, the line saying the first note stays and every triage button, as
+    /// <see cref="ReadRefusalWhole"/> measures; a line that is missing counts as cut off.
+    /// </summary>
+    private static string ReadNoteKeptWhole(string findingId) => ReadPartsWhole(findingId, @"
+var row = card.closest('details.type-row');
+if (row) { row.open = true; }
+var status = card.querySelector('.card-status');
+var parts = [
+  ['status', status],
+  ['line', status.querySelector('.card-note-kept')]
 ];");
 
     /// <summary>
