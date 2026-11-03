@@ -84,6 +84,9 @@ namespace SwReview.AddIn.Tests;
 /// do, and the page shows it as it arrives; after a reload the cards carry the backend's words whichever of the labels and the
 /// snapshot answers first; a read-only restore's cleared line is the backend's read-only form, which asks for no decision; and
 /// a read-only restore's Transcript names each withdrawal that took a decision, as the live line does.
+/// *Changed 2026-11-02 (002 T374; cycle 13's Tier 2 review):* a `finding` event names the tally, null while no finding records
+/// a triage, and the page changes the tally only when the event names it, so an older backend's finding, which never does,
+/// leaves it as it was (009 FR-030).
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -2133,8 +2136,11 @@ public sealed class ReviewPageTriageTests
     /// the review's tally, as the disposition events do, and the page shows it as sent. F-001's Accept as `already known` is the
     /// review's one triage; the resumed turn announces F-002, flagged and undecided, its tally counting it not recorded, and the
     /// page shows that count at once, not when the turn ends. Then the fold announces F-001 again with another verdict, its
-    /// Accept cleared, so its event carries no tally - the review records no triage any more - and the tally goes, as a
+    /// Accept cleared, so its event's tally is null - the review records no triage any more - and the tally goes, as a
     /// disposition event that carries none takes it.
+    /// *Changed 2026-11-02 (cycle 13's Tier 2 review):* the fold's event named no tally. The backend now names one on every
+    /// `finding` event, null while no finding records a triage, so the page tells it from an older backend's, which names none
+    /// and leaves the tally as it was (<see cref="AnOlderBackendsFindingLeavesTheTallyAsItWas"/>).
     /// </summary>
     [Fact]
     public void AFindingAnnouncedWithTheTallyShowsItAsItArrives()
@@ -2156,11 +2162,36 @@ public sealed class ReviewPageTriageTests
             Assert.Equal(Lines(added), ReviewPageDriver.Strings(counted, "lines"));
             Assert.Equal(new[] { "F-001", "F-002" }, ReviewPageDriver.Strings(await driver.Read(ReadCards), "ids"));
 
-            await driver.Push(Chat, 4, "finding", Finding("F-001", null, "suspected", "low"));
+            await driver.Push(Chat, 4, "finding", WithTally(Finding("F-001", null, "suspected", "low"), null));
             await driver.Settle();
             JsonElement gone = await driver.Read(ReadTally);
-            Assert.False(gone.GetProperty("shown").GetBoolean(), "a tally is shown after a finding that carries none: " + gone);
+            Assert.False(gone.GetProperty("shown").GetBoolean(), "a tally is shown after a finding whose tally is null: " + gone);
             Assert.Empty(ReviewPageDriver.Strings(gone, "lines"));
+        });
+    }
+
+    /// <summary>
+    /// A backend of cycles 7 to 12 sends the tally on the disposition events and never on a `finding` event (009 FR-030), so a
+    /// finding it announces - a resumed turn's, or a fold's - leaves the tally as it was, as before cycle 13, until a
+    /// disposition event or the turn's end sends another (cycle 13's Tier 2 review). F-001's Accept as `already known` is the
+    /// review's one triage; F-002, announced after it with no tally named, leaves that tally shown.
+    /// </summary>
+    [Fact]
+    public void AnOlderBackendsFindingLeavesTheTallyAsItWas()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            JsonObject accepted = Tally(0, 1, 0, 0, 0, 0);
+            await driver.StartReview();
+            await driver.Push(Chat, 1, "finding", Finding("F-001"));
+            await driver.Push(Chat, 2, "disposition", WithTally(DispositionEvent("F-001", AcceptedAlreadyKnown()), accepted));
+            await driver.Push(Chat, 3, "finding", Finding("F-002"));
+            await driver.Settle();
+
+            JsonElement kept = await driver.Read(ReadTally);
+            Assert.True(kept.GetProperty("shown").GetBoolean(), "an older backend's finding took the tally away: " + kept);
+            Assert.Equal(Lines(accepted), ReviewPageDriver.Strings(kept, "lines"));
+            Assert.Equal(new[] { "F-001", "F-002" }, ReviewPageDriver.Strings(await driver.Read(ReadCards), "ids"));
         });
     }
 
@@ -2502,11 +2533,14 @@ public sealed class ReviewPageTriageTests
     private static string[] Lines(JsonObject tally) =>
         new[] { tally["text"]!.GetValue<string>(), tally["misses_text"]!.GetValue<string>() };
 
-    /// <summary><paramref name="body"/> - a reply or an event body - carrying <paramref name="tally"/>, as the backend adds it.</summary>
-    private static string WithTally(string body, JsonObject tally)
+    /// <summary>
+    /// <paramref name="body"/> - a reply or an event body - carrying <paramref name="tally"/>, as the backend adds it, or null,
+    /// as it names it on a `finding` event while no finding records a triage (cycle 13's Tier 2 review).
+    /// </summary>
+    private static string WithTally(string body, JsonObject? tally)
     {
         JsonObject node = JsonNode.Parse(body)!.AsObject();
-        node["triage_tally"] = tally.DeepClone();
+        node["triage_tally"] = tally?.DeepClone();
         return node.ToJsonString();
     }
 

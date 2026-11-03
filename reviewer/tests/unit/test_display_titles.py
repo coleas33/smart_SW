@@ -36,6 +36,7 @@ from swreview.report.titles import (
 from swreview.tools import recording
 from swreview.tools.context import ToolContext, context_for
 from tests.support.packages import build_package
+from tests.support.triage import finding_alone
 
 NAMES = {"cmp:0001": "housing-1", "cmp:0002": "housing-2", "cmp:0003": " "}
 """Two named parts and one whose name is blank, which keeps its id."""
@@ -295,10 +296,14 @@ def recorded_context() -> tuple[ToolContext, list[tuple[str, dict[str, Any]]]]:
 def test_the_finding_event_carries_the_display_title_and_the_session_the_recorded_one(
     recorded_context: tuple[ToolContext, list[tuple[str, dict[str, Any]]]],
 ) -> None:
+    """*Changed 2026-11-02 (002 cycle 13's Tier 2 review):* the body names the triage tally beside
+    the finding, null here, as no finding records a triage."""
     context, events = recorded_context
     [recorded] = context.require_session().findings
 
-    assert events == [("finding", pane_finding(recorded, component_names(context.ir)))]
+    assert events == [
+        ("finding", {**pane_finding(recorded, component_names(context.ir)), "triage_tally": None})
+    ]
     assert events[0][1]["title"] == display_title(recorded, component_names(context.ir))
     assert recorded.title == title_from(LONG)
 
@@ -306,6 +311,8 @@ def test_the_finding_event_carries_the_display_title_and_the_session_the_recorde
 def test_the_snapshot_carries_display_titles_on_findings_and_rows(
     recorded_context: tuple[ToolContext, list[tuple[str, dict[str, Any]]]],
 ) -> None:
+    """*Changed 2026-11-02 (002 cycle 13's Tier 2 review):* the stream's body names the triage
+    tally beside the finding, and the snapshot's finding is that body's finding."""
     context, events = recorded_context
     session, package = context.require_session(), context.ir
     names = component_names(package)
@@ -313,7 +320,7 @@ def test_the_snapshot_carries_display_titles_on_findings_and_rows(
 
     snapshot = review_snapshot(session, package, run_id="run")
 
-    assert snapshot["findings"] == [events[0][1]]
+    assert snapshot["findings"] == [finding_alone(events[0][1])]
     assert [row["title"] for row in snapshot["ranking"]["rows"]] == [
         display_title(recorded, names)
     ]

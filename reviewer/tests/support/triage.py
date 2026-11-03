@@ -2,13 +2,15 @@
 
 The backend counts the flagged findings by outcome, those with none and the passes judged wrong
 once (`report/summary.triage_tally`), and sends the result beside the review summary, in the
-disposition route's reply and in the `disposition` and `disposition.cleared` events. A test pins
+disposition route's reply and in the `disposition` and `disposition.cleared` events, and beside
+each `finding` event's finding (cycle 13), null there while none is recorded. A test pins
 what it sends with `tally_body`, which states the counts and `report.md`'s two lines in the words
 file's words without calling the function under test.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 
@@ -38,3 +40,10 @@ def tally_body(
         ),
         "misses_text": f"Passes judged wrong (misses): {misses}",
     }
+
+
+def finding_alone(body: Mapping[str, Any]) -> dict[str, Any]:
+    """A `finding` event's body without the `triage_tally` it names beside the finding (002 cycle
+    13; null while no finding records a triage): the finding, as a session and a snapshot hold it
+    and as the scorer reads it."""
+    return {key: value for key, value in body.items() if key != "triage_tally"}

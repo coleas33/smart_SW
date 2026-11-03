@@ -244,12 +244,16 @@ def test_a_finding_body_may_carry_the_triage_tally_beside_the_finding() -> None:
     """002 cycle 13 (FR-031): a `finding` body carries the review's triage tally beside the
     finding while some finding records a triage, as the `disposition` bodies do. The contract takes
     it, of its own shape, and still refuses a malformed one and any other key beside the finding;
-    and a session's finding, closed where the session lists it, takes neither."""
+    and a session's finding, closed where the session lists it, takes neither.
+
+    *Changed 2026-11-02 (cycle 13's Tier 2 review):* the contract takes null there too, which every
+    `finding` body names while no finding records a triage, and a session's finding refuses it."""
     body = {**_finding_body(), "triage_tally": tally_body(known=1, not_recorded=1)}
     event = {"seq": 1, "at": "2026-11-02T12:00:00Z", "type": "finding", "body": body}
     validator = contract_validator(EVENTS_CONTRACT)
 
     validator.validate(event)
+    validator.validate({**event, "body": {**body, "triage_tally": None}})
     malformed = {**body["triage_tally"], "text": 1}
     for spoiled in ({**body, "triage_tally": malformed}, {**body, "unexpected": 1}):
         with pytest.raises(SchemaValidationError):
@@ -258,8 +262,9 @@ def test_a_finding_body_may_carry_the_triage_tally_beside_the_finding() -> None:
         schema={"$ref": f"{SESSION_SCHEMA}#/properties/findings"}
     )
     findings.validate([_finding_body()])
-    with pytest.raises(SchemaValidationError):
-        findings.validate([body])
+    for refused in (body, {**body, "triage_tally": None}):
+        with pytest.raises(SchemaValidationError):
+            findings.validate([refused])
 
 
 # --- every emitted event validates -------------------------------------------------------
