@@ -1423,3 +1423,11 @@ checkout into `C:\smart_SW` or the account's profile, whose paths hold no bracke
   included, none broken. Every changed file LF in the index.
 - No C# or page file changed, so no C# gate, and no words changed. No SOLIDWORKS process, seat
   task, or paid or live test ran.
+- *Done 2026-11-03, cycle 19 stacked on cycle 18:* the gates above ran on cycle 19 before it was
+  stacked on cycle 18 (Phase 14, T086 to T091). The two met in the seat plan, the plan's pins and
+  the records. Each kept both cycles' text, cycle 18's first. At step 4.5, item 4, cycle 18's
+  console fallback block keeps its words, and its `swreview timing` line reads the checkout by
+  `cd -LiteralPath`: the one read of the checkout cycle 18 added or reworded. 007 is 87 / 8 / 0 at
+  T092 and 90 / 5 / 0 at T095. On the stacked tree the seven seat modules gave the counts recorded
+  before it at each step. T095's sub-item of the stacking in [tasks.md](tasks.md) names each
+  meeting. The whole suites on the stacked tree are recorded next, as T095's last sub-item.
