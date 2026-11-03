@@ -1382,6 +1382,100 @@ def test_disposition_reports_a_second_triage_as_its_own_refusal(run_dir: Path) -
     assert run_files(run_dir) == before
 
 
+def test_disposition_says_to_pick_an_outcome_when_the_same_decision_comes_again_without_one(
+    run_dir: Path,
+) -> None:
+    """Roadmap hole H-c-010 (002 T376): the same `--decision` again with no `--triage`, on a
+    decision recorded without one, is reported as any refusal is - exit 1 and one line on stderr -
+    its line naming its own class, `OutcomeNeededError`, and the repair, where it named
+    `ValueError` and the terminal rule; nothing is written."""
+    payload(
+        invoke(
+            "disposition",
+            str(run_dir),
+            "F-001",
+            "--decision",
+            "accepted",
+            "--by",
+            "FICT-ENG",
+            "--json",
+        )
+    )
+    before = run_files(run_dir)
+
+    again = invoke(
+        "disposition", str(run_dir), "F-001", "--decision", "accepted", "--by", "FICT-ENG"
+    )
+
+    assert again.exit_code == 1
+    assert again.stderr.splitlines() == [
+        "error: OutcomeNeededError: finding F-001 is accepted with no triage recorded; send "
+        "'accepted' again with a triage to record one"
+    ]
+    assert run_files(run_dir) == before
+
+
+def test_a_console_decision_after_a_defer_keeps_its_note_when_none_is_sent(
+    run_dir: Path, tmp_path: Path
+) -> None:
+    """Roadmap hole H-c-010 (002 T376): without `--note`, `swreview disposition` keeps the note
+    already recorded when its decision replaces one, as the card's note box does, which starts
+    from the record: a Defer recorded with 188A's date and no triage, then an Accept with an
+    outcome and no `--note`, keeps the date - in `session.json`, the payload and `report.md` -
+    with the Accept's own `by`. An empty `--note` records none: a Reject after the same Defer."""
+    cleared_dir = tmp_path / "FICT-cleared"
+    shutil.copytree(run_dir, cleared_dir)
+    dated = "FICT first shown at an earlier sitting"
+    deferred = ("--decision", "deferred", "--note", dated, "--by", "FICT-ENG", "--json")
+    payload(invoke("disposition", str(run_dir), "F-001", *deferred))
+    payload(invoke("disposition", str(cleared_dir), "F-001", *deferred))
+
+    body = payload(
+        invoke(
+            "disposition",
+            str(run_dir),
+            "F-001",
+            "--decision",
+            "accepted",
+            "--triage",
+            "new_and_real",
+            "--by",
+            "FICT-ENG-2",
+            "--json",
+        )
+    )
+    cleared = payload(
+        invoke(
+            "disposition",
+            str(cleared_dir),
+            "F-001",
+            "--decision",
+            "rejected",
+            "--note",
+            "",
+            "--by",
+            "FICT-ENG-2",
+            "--json",
+        )
+    )
+
+    saved = saved_disposition(run_dir)
+    assert (saved["decision"], saved["note"], saved["by"], saved["triage"]) == (
+        "accepted",
+        dated,
+        "FICT-ENG-2",
+        "new_and_real",
+    )
+    assert (body["decision"], body["note"], body["by"], body["triage"]) == (
+        "accepted",
+        dated,
+        "FICT-ENG-2",
+        "new_and_real",
+    )
+    assert f"  - note: {dated}\n" in (run_dir / "report.md").read_text(encoding="utf-8")
+    assert (saved_disposition(cleared_dir)["note"], cleared["note"]) == ("", "")
+
+
 def test_disposition_on_a_pass_takes_no_triage_but_wrong(run_dir: Path) -> None:
     """Owner decision 187A (002 T332, FR-031): on a pass - 'Checked, no issue' - `--triage` with
     any outcome but `wrong` is reported as any refusal is, exit 1 and one line on stderr, its line

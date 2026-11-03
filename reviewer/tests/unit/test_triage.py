@@ -34,6 +34,10 @@ decision and never inferred from it (002 research, 185A). What this pins:
   keeps a note sent with it when none is recorded, and the first when one is; and a Defer
   recorded without a triage takes one the same way, sent again with the same decision, and stays
   deferred, while a Defer again with none is refused as before.
+- **an outcome needed** (002 T376, roadmap hole H-c-010): the repair press made with no outcome -
+  the decision recorded without a triage, sent again with none - is refused with a `ValueError`
+  of its own class, which names the repair; a Defer that holds a triage is refused another Defer
+  as before, its message naming the triage.
 
 Every fixture is fictional: FICT names, and an explicit `by` on every record.
 """
@@ -422,8 +426,6 @@ def test_a_deferred_finding_takes_a_late_triage_and_stays_deferred(tmp_path: Pat
         ([("rejected", None)], ("accepted", "wrong"), TERMINAL, False),
         ([("accepted", "wrong")], ("rejected", "wrong"), TERMINAL, False),
         ([("accepted", None)], ("rejected", None), TERMINAL, False),
-        ([("accepted", None)], ("accepted", None), TERMINAL, False),
-        ([("deferred", None)], ("deferred", None), "is deferred", False),
         ([("deferred", "wrong")], ("deferred", "already_known"), "is deferred", False),
     ],
     ids=[
@@ -435,8 +437,6 @@ def test_a_deferred_finding_takes_a_late_triage_and_stays_deferred(tmp_path: Pat
         "another-decision-with-a-triage",
         "another-decision-on-a-triage",
         "another-decision",
-        "the-same-decision-with-no-triage",
-        "a-defer-again-with-no-triage",
         "a-defer-again-holding-a-triage",
     ],
 )
@@ -464,7 +464,14 @@ def test_a_second_triage_or_another_decision_is_still_refused(
     on a Defer recorded without one, is no longer refused - it is the Defer's late triage
     (`test_a_deferred_finding_takes_a_late_triage_and_stays_deferred`) - so the case
     `a-defer-again-with-a-triage` is now `a-defer-again-with-no-triage`: a Defer after a Defer
-    with no outcome is still refused, as is one with an outcome when the Defer holds one."""
+    with no outcome is still refused, as is one with an outcome when the Defer holds one.
+
+    *Changed 2026-11-03 on purpose (002 T376; roadmap hole H-c-010):* the cases
+    `the-same-decision-with-no-triage` and `a-defer-again-with-no-triage` - the decision recorded
+    without a triage, sent again with none - move to
+    `test_the_same_decision_again_without_an_outcome_says_to_pick_one_first`, which asserts their
+    own class, `OutcomeNeededError`, and its message, every decision's, and that nothing is
+    written; this test keeps every refusal whose class stays as it was."""
     run_dir = run_folder(tmp_path)
     for decision, triage in first:
         apply_disposition(run_dir, "F-001", decision, "FICT note", BY, at=FIRST_AT, triage=triage)
@@ -479,6 +486,58 @@ def test_a_second_triage_or_another_decision_is_still_refused(
     # Read from the module, so a missing class fails these cases alone and not the collection.
     expected = dispositions.TriageAlreadyRecordedError if own_class else ValueError
     assert type(refused.value) is expected
+    assert folder_bytes(run_dir) == before
+
+
+@pytest.mark.parametrize("decision", ["accepted", "rejected", "deferred"])
+def test_the_same_decision_again_without_an_outcome_says_to_pick_one_first(
+    tmp_path: Path, decision: str
+) -> None:
+    """Roadmap hole H-c-010 (002 T376): a decision recorded without a triage - an Accept, a Reject
+    or a Defer - sent again with none is the repair press its card's no-triage line names, made
+    with no outcome picked. It is refused with a `ValueError` of its own class,
+    `OutcomeNeededError`, whose message names the repair, so the route can answer it with a
+    sentence that does, where `IllegalTransition`'s says to reload the review; nothing is
+    written."""
+    run_dir = run_folder(tmp_path)
+    apply_disposition(run_dir, "F-001", decision, "FICT note", BY, at=FIRST_AT)
+    before = folder_bytes(run_dir)
+
+    with pytest.raises(ValueError) as refused:
+        apply_disposition(run_dir, "F-001", decision, "FICT later note", OTHER_BY, at=LATER_AT)
+
+    # Read from the module, so a missing class fails these cases alone and not the collection.
+    assert type(refused.value) is dispositions.OutcomeNeededError
+    assert str(refused.value) == (
+        f"finding F-001 is {decision} with no triage recorded; send {decision!r} again with a "
+        "triage to record one"
+    )
+    assert folder_bytes(run_dir) == before
+
+
+@pytest.mark.parametrize("triage", [None, "already_known"], ids=["with-none", "with-another"])
+def test_a_defer_holding_a_triage_is_refused_another_defer_naming_it(
+    tmp_path: Path, triage: str | None
+) -> None:
+    """Roadmap hole H-c-010 (002 T376): a Defer that holds a triage, sent Defer again - with none
+    or another - is refused as before, with a plain `ValueError`: its outcome is recorded, so none
+    is needed. The message names the triage recorded and says the finding can only move to
+    accepted or rejected, which is true of a Defer that holds one; it said so of every Defer,
+    which owner decision 198A made untrue: a Defer with none takes one, sent again with Defer."""
+    run_dir = run_folder(tmp_path)
+    apply_disposition(run_dir, "F-001", "deferred", "FICT note", BY, at=FIRST_AT, triage="wrong")
+    before = folder_bytes(run_dir)
+
+    with pytest.raises(ValueError) as refused:
+        apply_disposition(
+            run_dir, "F-001", "deferred", "FICT later note", OTHER_BY, at=LATER_AT, triage=triage
+        )
+
+    assert type(refused.value) is ValueError
+    assert str(refused.value) == (
+        "finding F-001 is deferred with its triage ('wrong'); it can only move to accepted or "
+        "rejected, not 'deferred' again"
+    )
     assert folder_bytes(run_dir) == before
 
 

@@ -416,6 +416,21 @@ def test_a_refused_second_triage_says_the_recorded_one_stands() -> None:
     assert labels == TRIAGE_ALREADY_RECORDED
 
 
+OUTCOME_NEEDED = {"OutcomeNeeded": "Pick an outcome first, then press the same button again."}
+"""The class the disposition route refuses a press repeated without an outcome with (roadmap hole
+H-c-010): the decision recorded without a triage - an Accept, a Reject or a Defer - sent again with
+none, the repair press of the card's no-triage line made with none picked. `IllegalTransition`'s
+sentence, which it met before, says to reload the review, and a reload draws the note box from the
+record, so a note typed for the retry is lost; this one names the repair. An error sentence takes
+no placeholder, so it names the same button, which the card's no-triage line names beside it."""
+
+
+def test_a_press_repeated_without_an_outcome_says_to_pick_one_first() -> None:
+    errors = load_words().labels.errors
+    labels = {key: errors.get(key) for key in OUTCOME_NEEDED}
+    assert labels == OUTCOME_NEEDED
+
+
 def test_a_pass_offers_its_one_triage_worded_as_a_miss() -> None:
     """Owner decision 187A (002 FR-031): a pass - 'Checked, no issue' - takes no triage but
     `wrong`, and its card offers that one, worded as the miss it is counted as, apart from the
