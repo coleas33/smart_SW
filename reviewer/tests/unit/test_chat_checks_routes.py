@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -71,6 +72,7 @@ from tests.support.features import (
     folder,
     rms_package,
 )
+from tests.support.held_record import hold_the_first_save
 from tests.support.packages import CREATED_AT
 
 ORIGIN = "https://swreview.invalid"
@@ -156,6 +158,17 @@ def model_check_package(cover_core: tuple[FeatureSpec, ...] = COVER_CORE) -> Evi
     return package.model_copy(
         update={"extractor": package.extractor.model_copy(update={"profile": "model_check"})}
     )
+
+
+def two_failing_parts_package() -> EvidencePackage:
+    """`model_check_package` with the frame's core feature undescribed too: the frame and the
+    cover each fail `FAIL_RULE`, so a check of every part document has two findings to accept."""
+    package = model_check_package()
+    features = [
+        item.model_copy(update={"description": ""}) if item.name == "Boss-Extrude1" else item
+        for item in package.features
+    ]
+    return package.model_copy(update={"features": features})
 
 
 @pytest.fixture
@@ -1066,6 +1079,41 @@ class TestAcceptException:
 
         assert response.status_code == 404
         assert error_of(response)["error_class"] == "UnknownCheck"
+
+    def test_two_accepts_on_one_folder_both_reach_its_record(
+        self, client: TestClient, run_root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """002 cycle 25's Tier 2 review, its must-fix: each accept runs the check again, whose
+        save waits out a reader, so the earlier accept's re-run could land after the later
+        one's and the folder showed the first exception alone. The folder takes its accepts in
+        turn: here the earlier re-run's save meets a reader, the later accept comes meanwhile,
+        and the record, its read-back and the store all hold both."""
+        directory = run_root / CHECK_ID
+        save_package(two_failing_parts_package(), directory)
+        result = start_check(client, directory, document_id=None)
+        first, second = (
+            row["finding"]["id"] for row in result["findings"] if row["rule_id"] == FAIL_RULE
+        )
+        met_the_reader = hold_the_first_save(monkeypatch, SESSION_FILE)
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            earlier = pool.submit(accept, client, CHECK_ID, first)
+            assert met_the_reader.wait(5), "the earlier re-run's save meets the reader"
+            later = accept(client, CHECK_ID, second)
+            replies = [earlier.result(), later]
+
+        assert [reply.status_code for reply in replies] == [200, 200], [r.text for r in replies]
+        accepted = {reply.json()["exception_id"] for reply in replies}
+        session = load_session(directory / SESSION_FILE)
+        assert {item.exception_id for item in session.findings if item.check == FAIL_RULE} == (
+            accepted
+        ), "the record holds both exceptions"
+        read = client.get(f"/checks/{CHECK_ID}").json()["findings"]
+        assert {
+            row["finding"]["exception_id"] for row in read if row["rule_id"] == FAIL_RULE
+        } == accepted, "and so does its read-back"
+        stored = ExceptionStore(directory / EXCEPTIONS_FILE_NAME).load().exceptions
+        assert {exception.id for exception in stored} == accepted, "and the store"
 
 
 # --- 6. no provider, no key, no network (SC-011) ----------------------------------

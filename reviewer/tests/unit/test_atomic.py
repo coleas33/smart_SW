@@ -30,6 +30,7 @@ from __future__ import annotations
 import errno
 import fnmatch
 import os
+import stat
 import sys
 import threading
 import time
@@ -367,6 +368,108 @@ def test_an_error_that_is_not_another_handles_is_tried_once_and_raises_at_once(
     assert sorted(path.name for path in tmp_path.iterdir()) == ["run-status.json"]
 
 
+def test_a_folder_at_the_target_s_name_is_refused_at_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """*Added 2026-11-03 (002 T412, cycle 25's Tier 2 review):* Windows refuses a replace over
+    a folder with the `ERROR_ACCESS_DENIED` a held file gives, but no wait lets it through, so
+    it raises at once, as before cycle 25, and the engineer is not kept 2 s for the same
+    error. Another platform refuses it with an error of its own, at once as well."""
+    target = tmp_path / "session.json"
+    target.mkdir()
+
+    waits = _waits(monkeypatch)
+    with pytest.raises(OSError):
+        write_atomic(target, b"{}\n")
+
+    assert waits == []
+    assert target.is_dir()
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["session.json"]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="only Windows refuses a read-only target")
+def test_a_target_marked_read_only_is_refused_at_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """*Added 2026-11-03 (002 T412, cycle 25's Tier 2 review):* a file marked read-only takes
+    no replace however long the writer waits, and Windows refuses it with WinError 5, as it
+    refuses a held one: the refusal itself raises at once, the old bytes kept, no temporary
+    left."""
+    target = tmp_path / "attention.json"
+    target.write_bytes(b'{"previous": true}\n')
+    target.chmod(stat.S_IREAD)
+    try:
+        waits = _waits(monkeypatch)
+        with pytest.raises(PermissionError) as raised:
+            write_atomic(target, b'{"previous": false}\n')
+    finally:
+        target.chmod(stat.S_IREAD | stat.S_IWRITE)
+
+    assert raised.value.winerror == ACCESS_DENIED
+    assert waits == []
+    assert target.read_bytes() == b'{"previous": true}\n'
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["attention.json"]
+
+
+def test_a_first_write_whose_temporary_is_held_is_waited_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """*Added 2026-11-03 (002 T412, cycle 25's Tier 2 review):* telling a target no wait lets
+    through reads the target; with none there yet - a first write, whose temporary a scanner
+    holds - the writer waits, as for a reader."""
+    target = tmp_path / "noise-floor.json"
+    tries: list[str] = []
+
+    def refused_twice(source: str, destination: Path) -> None:
+        tries.append(source)
+        if len(tries) <= 2:
+            raise _error(PermissionError, errno.EACCES, SHARING_VIOLATION)
+        REAL_REPLACE(source, destination)
+
+    waits = _waits(monkeypatch)
+    monkeypatch.setattr(atomic.os, "replace", refused_twice)
+    write_atomic(target, b"{}\n")
+
+    assert target.read_bytes() == b"{}\n"
+    assert waits == list(atomic.REPLACE_WAITS_S[:2])
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["noise-floor.json"]
+
+
+def test_the_waits_recorded_are_the_writer_s_alone_while_another_thread_sleeps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """*Added 2026-11-03 (002 T412, cycle 25's Tier 2 review):* the waits are recorded through
+    the writer's own `time` (`_waits`), so a sleep on another live thread - a reader's, the
+    test client's - is neither recorded nor cut short, and the waits asserted are the
+    writer's alone."""
+    target = tmp_path / "session.json"
+    target.write_bytes(b'{"previous": true}\n')
+    slept: list[float] = []
+    tries: list[str] = []
+
+    def another_thread_sleeps() -> None:
+        started = time.perf_counter()
+        time.sleep(0.003)
+        slept.append(time.perf_counter() - started)
+
+    def refused_once(source: str, destination: Path) -> None:
+        tries.append(source)
+        if len(tries) == 1:
+            sleeper = threading.Thread(target=another_thread_sleeps)
+            sleeper.start()
+            sleeper.join()
+            raise _error(PermissionError, errno.EACCES, ACCESS_DENIED)
+        REAL_REPLACE(source, destination)
+
+    waits = _waits(monkeypatch)
+    monkeypatch.setattr(atomic.os, "replace", refused_once)
+    write_atomic(target, b'{"previous": false}\n')
+
+    assert waits == [atomic.REPLACE_WAITS_S[0]], "the writer's one wait, and no other thread's"
+    assert slept[0] >= 0.002, "the other thread slept its own sleep"
+    assert target.read_bytes() == b'{"previous": false}\n'
+
+
 def _held_as_python_opens(path: Path) -> Callable[[], None]:
     """A reader as the backend's own are, cycle 17's match among them: sharing read and
     write, not delete."""
@@ -397,20 +500,39 @@ def _held_as_the_add_in_opens(path: Path) -> Callable[[], None]:
     ids=["a-python-read", "the-add-ins-session-head-read"],
 )
 def test_a_real_reader_holding_the_record_for_100_ms_does_not_fail_the_save(
-    tmp_path: Path, hold: Callable[[Path], Callable[[], None]]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    hold: Callable[[Path], Callable[[], None]],
 ) -> None:
     """Nothing stubbed: a reader on another thread opens the record, holds it 100 ms and
-    lets go; the save, begun while it holds it, waits it out and lands."""
+    lets go; the save, begun while it holds it, waits it out and lands.
+
+    *Changed 2026-11-03 on purpose (002 T412, cycle 25's Tier 2 review):* the replace is
+    watched, passing every try through, and the reader lets go 100 ms after the save's first
+    refusal rather than 100 ms after it took hold, so the test proves the wait: before, a save
+    a slow runner began after the hold had ended passed it with no refusal at all."""
     target = tmp_path / "session.json"
     target.write_bytes(b'{"previous": true}\n')
     held = threading.Event()
+    refused = threading.Event()
+    refusals: list[OSError] = []
+
+    def watched_replace(source: str, destination: Path) -> None:
+        try:
+            REAL_REPLACE(source, destination)
+        except PermissionError as refusal:
+            refusals.append(refusal)
+            refused.set()
+            raise
 
     def reader() -> None:
         release = hold(target)
         held.set()
+        refused.wait(5)
         time.sleep(0.1)
         release()
 
+    monkeypatch.setattr(atomic.os, "replace", watched_replace)
     thread = threading.Thread(target=reader)
     thread.start()
     try:
@@ -419,5 +541,7 @@ def test_a_real_reader_holding_the_record_for_100_ms_does_not_fail_the_save(
     finally:
         thread.join()
 
+    assert refusals, "the save met the reader and waited it out"
+    assert {refusal.winerror for refusal in refusals} == {ACCESS_DENIED}
     assert target.read_bytes() == b'{"previous": false}\n'
     assert sorted(path.name for path in tmp_path.iterdir()) == ["session.json"]
