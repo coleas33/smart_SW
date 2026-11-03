@@ -7412,14 +7412,18 @@ the decision register now records 160A as done.
     `OutcomeNeededError`, which the live route answers `409 OutcomeNeeded`, not retryable, and the
     console names on its one line. A record that holds a triage is refused as before
     (`IllegalTransition`, or `TriageAlreadyRecorded` for a second triage), and so is every other
-    press.
+    press. *Changed 2026-11-03 by cycle 15's Tier 2 review (Review, below):* on a flagged finding
+    alone; a pass, whose card has no no-triage line and offers one outcome, the miss, is refused
+    as before.
   - **The words.** `labels.errors.OutcomeNeeded`: "Pick an outcome first, then press the same
     button again." An error sentence takes no placeholder, so it names the same button, and the
     card's no-triage line beside it names the decision. The page prints it as any class's
     sentence, and a refused press leaves the box as typed (H-c-009, *Settled*, the note box).
   - **The record's message.** A Defer sent again now reaches the deferred refusal only when it
     holds a triage, so the message names that triage and says the finding can only move to
-    accepted or rejected; it said so of every Defer, which 198A made untrue.
+    accepted or rejected; it said so of every Defer, which 198A made untrue. *Changed 2026-11-03
+    by cycle 15's Tier 2 review (Review, below):* a pass's Defer, which holds none, reaches it
+    too, its message naming no triage.
   - **The console's note.** `--note` left out sends the note recorded, as the card's box, drawn
     from the record, does, and none before a first decision; an empty `--note` sends none, so a
     decision that replaces a Defer records none, while a late triage keeps the note recorded, as
@@ -7442,11 +7446,17 @@ the decision register now records 160A as done.
   decision recorded without a triage sent again with none moved to the record's new test, which
   asserts their own class; `test_a_deferred_finding_takes_a_late_triage_and_a_note_on_the_live_route`
   (that Defer again, now `409 OutcomeNeeded`); and the 002 literal of the specs-README pin (T375,
-  T380).
-- **Left open**: `IllegalTransition`'s sentence still says to reload the review, which draws the
-  note box from the record, for every refusal it answers - a different decision on a settled
-  finding, a pass pressed again, or Defer again with no triage on a Defer that holds one (the
-  *Review* below); the live route still records the note its body sends, so a client other than
+  T380). *Changed 2026-11-03 by cycle 15's Tier 2 review (Review, below):* `OutcomeNeededError`
+  is raised on a flagged finding alone, and the deferred refusal's message names no triage on a
+  pass's Defer; the note left out is the record's rule, `set_disposition` taking a note of `None`
+  as the one recorded, and `cli.py` sends `--note` as given.
+- **Left open**: for every refusal `IllegalTransition` answers - a different decision on a
+  settled finding, a pass pressed again, or Defer again on a Defer that holds a triage, with
+  none or with a triage, as its card sends it with the triage it holds pressed - its sentence
+  still says to reload the review, and a reload draws the note box from the record, losing a
+  note typed for the press, which the box otherwise keeps for the next one. A sentence true of
+  that Defer, whose triage its later Accept or Reject replaces, would need words of its own (the
+  *Review* below). The live route still records the note its body sends, so a client other than
   the page that sends none after a Defer records none, though the record now takes a note of
   `None` as the one recorded; and the hole's row in
   [`docs/roadmap/holes.md`](../../docs/roadmap/holes.md) is for the roadmap's next update run.
@@ -7475,7 +7485,9 @@ the decision register now records 160A as done.
     so Defer pressed again sent it and met `409 IllegalTransition`, whose sentence says to
     reload, losing the typed note. It is now `TriageAlreadyRecordedError`,
     `409 TriageAlreadyRecorded`, as on an Accept or Reject, with the same message; with no triage
-    it is `IllegalTransition` as before.
+    it is `IllegalTransition` as before. *Changed 2026-11-03 by a read-only check of these fixes
+    (below):* undone, so Defer again on a Defer that holds a triage is `409 IllegalTransition`,
+    with a triage or none, as 198A kept it.
   - *The console's note* (should-fix). The rule for `--note` left out lived in `cli.py`, which
     read `session.json` twice; `set_disposition` and `apply_disposition` now take a note of
     `None` as the note recorded (none before a first decision), and `cli.py` sends `--note` as
@@ -7495,3 +7507,19 @@ the decision register now records 160A as done.
     [contracts/cli.md](../001-agentic-design-review/contracts/cli.md) and 009
     [contracts/plain-words.md](../009-engineer-workspace/contracts/plain-words.md) section 1. No
     words, page or fixture changed; nothing left for later.
+  - *Added 2026-11-03:* a read-only check of these fixes, one must-fix and four should-fix, as
+    T380's second dated sub-item records. The must-fix: *A Defer's second triage* reversed,
+    unsaid, a default recorded inside 198A (H-c-009, *Settled*, a Defer's late triage), and
+    `TriageAlreadyRecorded`'s sentence, a triage "is recorded only once. The one recorded
+    stands", is untrue of a Defer, whose triage a later Accept or Reject replaces: shown it after
+    a Defer pressed with another triage, the engineer could press Accept with the old triage
+    pressed back, recording the outcome they meant to change. It is undone, its cost in *Left
+    open*; the route's test is now
+    `test_a_defer_again_on_one_that_holds_a_triage_is_still_an_illegal_transition`, and the
+    record's cases with a triage expect a plain `ValueError` again, each with a dated note. The
+    should-fix: `GET /labels`' amendment in [contracts/chat-api.md](contracts/chat-api.md) and
+    `InvalidTriage`'s docstring say "a flagged finding's"; *Settled* and *Built* above carry
+    dated notes; a pass keeps its class from before H-c-010, not its message, its Defer's now
+    ending "not 'deferred' again" where it ended "not 'deferred'"; and `test_cli.py`'s
+    `test_disposition_on_a_pass_decided_again_without_an_outcome_names_value_error` pins the
+    console's line, a guard proved by a mutant.
