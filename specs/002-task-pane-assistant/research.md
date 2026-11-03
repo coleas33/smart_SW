@@ -8206,3 +8206,57 @@ note box from the record, losing a note typed for the press.
     key - `TurnRunning`, or an older backend's - shows the record the page holds, as before.
   - **The note box.** A refused press leaves it as typed, whatever the refusal (cycle 11's Tier 2
     review), and the record drawn from a refusal never touches it.
+- **Built** (2026-11-03; T402 and T403 in [tasks.md](tasks.md), Phase 38, the tests written
+  first): `report/dispositions.py`'s `DecisionAlreadyRecordedError` and `AlreadyDeferredError`,
+  raised by `_validate_transition`; `chat/server.py`'s `DecisionAlreadyRecorded` and
+  `AlreadyDeferred`, and `DispositionRefusal`, the five refusals' class, whose body names
+  `disposition`, the route mapping each class of the record to its answer in one table
+  (`DISPOSITION_REFUSALS`); the words file's three sentences; and `ReviewPage/app.js`, whose
+  `call` keeps a refusal's `disposition` and whose refused press draws the card's record from it
+  through `showDisposition`, which then leaves the note box as typed. The pane fixtures that embed
+  the labels block, regenerated, with `review-send-failure-events.json`'s pin moved;
+  `LabelsSample.cs` mirroring the words; dated notes in
+  [contracts/chat-api.md](contracts/chat-api.md) (the disposition route and `GET /labels`), 001
+  [contracts/cli.md](../001-agentic-design-review/contracts/cli.md) and 009
+  [contracts/plain-words.md](../009-engineer-workspace/contracts/plain-words.md) section 1.
+  Changed on purpose, each with a dated note, none loosened: `test_triage.py`'s
+  `test_the_decision_recorded_sent_again_with_nothing_new_says_it_is_already_recorded` (renamed
+  from the pass test, three cases added),
+  `test_a_defer_holding_a_triage_is_refused_another_defer_naming_it` (its class and message, two
+  pass cases added) and `test_a_second_triage_or_another_decision_is_still_refused` (two cases
+  moved to those); `test_chat_server.py`'s
+  `test_a_pass_accepted_again_without_an_outcome_says_it_is_already_recorded` and
+  `test_a_defer_again_on_one_that_holds_a_triage_says_what_its_later_decision_does` (renamed),
+  `test_the_same_decision_again_without_an_outcome_is_a_409_of_its_own` and
+  `test_a_second_triage_is_a_409_of_its_own_and_writes_nothing` (an Accept or Reject sent again
+  with none); `test_cli.py`'s
+  `test_disposition_on_a_pass_decided_again_without_an_outcome_says_it_is_already_recorded`
+  (renamed); and the 002 literal of the specs-README pin (T401, T404).
+- **Left open**:
+  - A refusal names the record, but not the triage tally, which stays as the page last had it
+    until the next reply or event names it; and a decision another client records after the
+    stream closed is seen only when the engineer presses on that card.
+  - Other refusals still say to reload where a reload is what shows the truth: `UnknownFinding`
+    (a finding the review no longer holds), `AlreadyAnswered`, `UnknownEvidenceRequest` and
+    `NotWaiting`. None is a decision the record refused.
+  - `IllegalTransition` stays the route's answer to a `ValueError` of the record that no class
+    names; no press makes one now.
+  - The captured pane fixture `review-waiting-apply-failure.json`, which has no generator, keeps
+    its capture's labels, the old `IllegalTransition` sentence among them, as it has since before
+    cycle 15.
+  - The hole's row in [`docs/roadmap/holes.md`](../../docs/roadmap/holes.md) is for the roadmap's
+    next update run.
+- **Gates** (T404; 2026-11-03), on the cycle's own tree:
+  - The whole non-live suite, the tokenizer required: 19,006 passed and 5 skipped on Python
+    3.12.3, its two warnings neither of this cycle: the test client's deprecation, and a
+    serializer warning from `test_ir_loader_append.py`'s invalid row. On Python 3.11.16
+    (`uv run --python 3.11 --isolated --all-extras`), the 86 modules the change touches or that
+    read the files it changed: 4,762 passed and 2 skipped.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed, again after the counts went in.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then 10,274
+    extractor and 4,381 add-in tests passed.
+  - The link check over the cycle's seven changed Markdown files, anchors included, none broken;
+    every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
+    ran.
+  - The whole suites on the final tree: recorded once they run.
