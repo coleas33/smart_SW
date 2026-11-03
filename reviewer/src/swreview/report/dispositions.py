@@ -10,7 +10,9 @@ State machine (data-model.md section 5): `none -> accepted | rejected | deferred
 decision, its decision, `by` and `at` unchanged. A second triage is refused with a class of its
 own, `TriageAlreadyRecordedError` (roadmap hole H-g-012). Owner decision 198A: that late triage
 keeps a note sent with it when none is recorded, and a Defer recorded without a triage takes one
-the same way, sent again with Defer, and stays deferred.
+the same way, sent again with Defer, and stays deferred. Sent again with no triage, a decision
+recorded without one is refused with `OutcomeNeededError`, which names the repair (roadmap hole
+H-c-010).
 
 A triage, one of `findings.TRIAGES`, may go with any decision and is never required (002
 FR-031). A deferred finding keeps its triage when the later Accept or Reject names none.
@@ -37,6 +39,7 @@ __all__ = [
     "DECISIONS",
     "REPORT_FILE_NAME",
     "SESSION_FILE_NAME",
+    "OutcomeNeededError",
     "TriageAlreadyRecordedError",
     "TriageOnAPassError",
     "apply_disposition",
@@ -58,6 +61,14 @@ class TriageAlreadyRecordedError(ValueError):
     a settled finding is; a class of its own so the route can say the recorded triage stands
     (`chat/server.py`, `TriageAlreadyRecorded`), where every other refusal's sentence reads as a
     refused decision. Still a `ValueError`, so every caller that refuses one refuses this."""
+
+
+class OutcomeNeededError(ValueError):
+    """The decision recorded without a triage, sent again with none (roadmap hole H-c-010): the
+    repair press a card's no-triage line names, made with no outcome picked. A class of its own so
+    the route can name the repair (`chat/server.py`, `OutcomeNeeded`), where `IllegalTransition`'s
+    sentence says to reload the review, which loses a note typed for the retry. Still a
+    `ValueError`, so every caller that refuses one refuses this."""
 
 
 class TriageOnAPassError(ValueError):
@@ -101,12 +112,19 @@ def _validate_transition(finding: Finding, decision: str, triage: str | None) ->
     current = finding.disposition
     if current is None:
         return
+    if decision == current.decision and triage is None and current.triage is None:
+        raise OutcomeNeededError(
+            f"finding {finding.id} is {current.decision} with no triage recorded; send "
+            f"{decision!r} again with a triage to record one"
+        )
     if current.decision == "deferred":
         if decision in _ALLOWED_FROM_DEFERRED:
             return
+        # Defer again: with a triage on none recorded it was the late triage, and with none it
+        # was refused above, so the Defer holds its triage here.
         raise ValueError(
-            f"finding {finding.id} is deferred; it can only move to accepted or rejected, "
-            f"not {decision!r}"
+            f"finding {finding.id} is deferred with its triage ({current.triage!r}); it can only "
+            f"move to accepted or rejected, not {decision!r} again"
         )
     if decision == current.decision and triage is not None and current.triage is not None:
         raise TriageAlreadyRecordedError(
@@ -164,9 +182,9 @@ def set_disposition(
 
     Raises `ValueError` for an unknown decision, a triage outside the four (naming them), a
     triage a pass does not take - `TriageOnAPassError` - or a transition the state machine
-    forbids - a second triage as `TriageAlreadyRecordedError` - both `ValueError`s of their own
-    class, and `KeyError` for a finding id that is not in the session. Nothing is changed on any
-    path.
+    forbids - a second triage as `TriageAlreadyRecordedError`, and the decision recorded without
+    a triage sent again with none as `OutcomeNeededError` - each a `ValueError` of its own class,
+    and `KeyError` for a finding id that is not in the session. Nothing is changed on any path.
     """
     if decision not in DECISIONS:
         raise ValueError(f"decision must be one of {sorted(DECISIONS)}, got {decision!r}")

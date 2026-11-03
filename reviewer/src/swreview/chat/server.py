@@ -151,6 +151,7 @@ from swreview.report.attention_record import ATTENTION_FILE_NAME
 from swreview.report.dispositions import (
     DECISIONS,
     REPORT_FILE_NAME,
+    OutcomeNeededError,
     TriageAlreadyRecordedError,
     TriageOnAPassError,
     find_finding,
@@ -288,7 +289,8 @@ class InvalidTriage(ChatError):
     A class of its own, not `InvalidDecision`, whose sentence asks for accept, reject or defer.
     The route checks both before the chat's state, as the decision is: the record's own refusal
     is a `ValueError`, which the route answers as `IllegalTransition` (a second triage as
-    `TriageAlreadyRecorded`, a triage a pass does not take as this class). One class for both,
+    `TriageAlreadyRecorded`, a press repeated without an outcome as `OutcomeNeeded`, a triage a
+    pass does not take as this class). One class for both,
     since both are a triage the finding does not take, answered alike, and the page sends neither:
     its pass card offers `wrong` alone.
     """
@@ -401,6 +403,17 @@ class TriageAlreadyRecorded(ChatError):
 
     status = 409
     error_class = "TriageAlreadyRecorded"
+
+
+class OutcomeNeeded(ChatError):
+    """The decision recorded without a triage, sent again with none (roadmap hole H-c-010): the
+    record's `OutcomeNeededError`, the repair press a card's no-triage line names, made with no
+    outcome picked. A class of its own because the page shows its class's sentence, which says to
+    pick an outcome first, where `IllegalTransition`'s says to reload the review, and a reload
+    draws the note box from the record, losing a note typed for the retry."""
+
+    status = 409
+    error_class = "OutcomeNeeded"
 
 
 class ProviderFailed(ChatError):
@@ -1632,6 +1645,8 @@ class ChatServer:
             raise UnknownFinding(f"no finding {finding_id!r} in this session") from exc
         except TriageAlreadyRecordedError as exc:
             raise TriageAlreadyRecorded(str(exc)) from exc
+        except OutcomeNeededError as exc:
+            raise OutcomeNeeded(str(exc)) from exc
         except TriageOnAPassError as exc:
             # The finding became a pass after `_refuse_a_pass_triage`: an answer graded it again.
             raise InvalidTriage(str(exc)) from exc
