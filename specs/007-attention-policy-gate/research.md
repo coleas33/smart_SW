@@ -1154,7 +1154,10 @@ it, but no page called it; the spec's Assumptions called a pane control a follow
    typed, as a number; and text that is not a number as typed, which the route refuses by name
    (`InvalidTiming`), so the page holds no rule about minutes. The fields are text boxes, so what
    was typed is what is sent and what stays. Save is off while every field is blank: it would
-   record nothing.
+   record nothing. *Changed 2026-11-03 (cycle 20; R14):* Save is off while any field is blank,
+   empty or spaces only, so each save posts all six, 0 typed for none, and no field posts null:
+   a blank supervision, verification or false-alarms field counted as its starting 0,
+   unannounced. The page still holds no rule about what a figure may be.
 5. After a save, the words file's line and nothing of the reply, which carries the figures and the
    net. After a refusal, its class's sentence from `labels.errors` and the class in the Details
    fold, never the backend's message, which names a refused figure. Either way the fields keep
@@ -1434,3 +1437,37 @@ checkout into `C:\smart_SW` or the account's profile, whose paths hold no bracke
 - *Done 2026-11-03:* the whole suites on the stacked tree (`6e6ba35d`): 18,996 passed and 5
   skipped on Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed. No
   C# or page file changed (T095's last sub-item).
+
+## R14. Save minutes stays off while any minutes box is blank (cycle 20, 2026-11-03)
+
+**Settled** (T096, 2026-11-03): on the Review page's minutes form (R12), Save stays off while any
+of the six boxes is blank, so each save records all six, 0 typed for none. Roadmap hole H-a-015,
+opened by roadmap run 6 and picked by the owner on 2026-11-03 from that run's brief (review Tier
+2); no decision id.
+
+Why: Save was off only while every box was blank, and a blank box posted null, which keeps what is
+recorded (R12, default 4). Supervision, verification and false alarms start at 0
+(`reviewer/src/swreview/tools/context.py`) and the net counts them
+(`reviewer/src/swreview/report/session.py`), so a box left blank counted as 0, unannounced: the
+page said only "The minutes are recorded." The seat plan's console line names all six (step 4.5,
+item 4).
+
+Defaults taken:
+
+1. A box is blank when it is empty or holds spaces only, as before. Save is on once all six hold
+   text, whatever it says: the page still holds no rule about what a figure may be, and text that
+   is not a number reaches the route, which refuses it by name (`InvalidTiming`), as R12's default
+   4 keeps.
+2. One line from the words file, `labels.timing_form.all_six`, under the form's heading, says to
+   type all six, zero for none. It says zero in a word, since no word of the form's two groups
+   holds a digit (`test_the_minutes_forms_words_name_no_figure`, decision 186A), and changing that
+   pin would loosen it. With no labels there is no form, and so no line (009 FR-030); labels that
+   name no such line draw the form without it.
+3. The rest of the form is unchanged: the figures kept after Save or a refusal, the retry on
+   `TurnRunning`, unsaved figures kept per review in page memory, and no form on a read-only
+   restore.
+4. The route and `swreview timing` are unchanged. The route still reads null as "keep what is
+   recorded", so the console can correct one figure; on the page a correction retypes all six,
+   from the private note.
+5. The seat plan's step 4.1 says all six are typed, 0 for none, and that Save stays off until they
+   are. M0-a's check of what the page wrote is not this cycle's: it waits for M0's tables (197A).
