@@ -119,6 +119,19 @@ on review for the owner, who may revert).
 Concurrency: one running turn per chat; the server serializes messages and evidence
 answers per chat and refuses with 409 rather than queueing silently.
 
+*Amended 2026-11-03 (002 cycle 24; [`docs/review-backlog.md`](../../../docs/review-backlog.md),
+cycle 18):* a turn has ended once the runner's `session.ended` is written, but the server still
+writes `report.md` and the attention record before the chat leaves `running`. A request that
+arrives in that moment at any route that answers `409 TurnRunning` - `send`, `messages`, both
+`evidence` routes, `disposition` and `timing` - waits for the chat to settle, up to
+`SETTLE_WAIT_S`, **5 s** (`reviewer/src/swreview/chat/server.py`), and is then answered as it
+would be a moment later: a turn that failed is `409 SessionFailed`, a disposition or minutes on a
+review now waiting for Send go to its worker, and a follow-up, answers or Send start their turn
+only then, so no turn starts before both files are written. Only a turn still running is refused
+at once; a chat still settling once the bound has passed is refused `409 TurnRunning`, its
+message and sentence unchanged. A Retry (`POST /sessions` naming `retry_of`) is not such a
+request: the folder stays claimed until the settle, so it is `409 RunDirInUse`, as before.
+
 One chat owns each run folder. Before setup's first await, both ticked and unticked starts
 reserve its resolved path: an overlapping start on the same folder is `409 RunDirInUse`
 before another setup or provider build, while another folder may start independently.

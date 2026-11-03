@@ -204,6 +204,16 @@ machine and the stream be tested without an ASGI server at all. One desktop pane
 open stream makes 50 wakeups a second the cheaper trade.
 """
 
+SETTLE_WAIT_S = 5.0
+"""How long a write waits for a chat whose turn has ended to settle (002 cycle 24).
+
+The worker moves a chat out of `running` only once it has written the report and the attention
+record (`_play`), after the runner's `session.ended`, so a write the page makes on a review it
+shows finished can come first. It waits for the settle rather than meeting `TurnRunning`. The
+final render of feature 008's big-assembly replay review took 31 ms on the development machine:
+the bound is a slow seat's margin, and past it the write is refused as before.
+"""
+
 PACKAGE_ERRORS = (
     FileNotFoundError,
     NotADirectoryError,
@@ -1570,7 +1580,7 @@ class ChatServer:
     async def send_review(self, request: Request) -> Response:
         """Reserve a waiting review on the event loop; build and send on its own worker."""
         chat = self._chat(request)
-        self._require_idle(chat)
+        await self._require_idle(chat)
         run = self._run_of(chat)
         if not run.awaiting_send:
             raise NotWaiting("this review is not waiting for Send")
@@ -1590,7 +1600,7 @@ class ChatServer:
         text = body.get("text")
         if not isinstance(text, str) or not text.strip():
             raise ChatError("a message needs a non-empty 'text'")
-        self._require_idle(chat)
+        await self._require_idle(chat)
         run = self._run_of(chat)
         if run.awaiting_send:
             raise NotSent("this review has not been sent to the model; press Send to model first")
@@ -1604,7 +1614,7 @@ class ChatServer:
         answer = body.get("answer")
         if not isinstance(answer, str) or not answer.strip():
             raise ChatError("an evidence answer needs a non-empty 'answer'")
-        self._require_idle(chat)
+        await self._require_idle(chat)
         run = self._run_of(chat)
         request_id = request.path_params["request_id"]
         self._require_answerable(run, [request_id])
@@ -1622,7 +1632,7 @@ class ChatServer:
         """
         chat = self._chat(request)
         answers = self._answer_batch(await self._json(request))
-        self._require_idle(chat)
+        await self._require_idle(chat)
         run = self._run_of(chat)
         self._require_answerable(run, [request_id for request_id, _ in answers])
         chat.to(ChatState.RUNNING)
@@ -1684,7 +1694,7 @@ class ChatServer:
             raise InvalidTriage(f"triage must be one of {list(TRIAGES)} or null, got {triage!r}")
         finding_id = request.path_params["finding_id"]
         self._refuse_a_pass_triage(chat, finding_id, triage)
-        self._require_idle(chat)
+        await self._require_idle(chat)
         run = self._run_of(chat)
         try:
             execute = self._on_worker if chat.state is ChatState.AWAITING_SEND else None
@@ -1746,7 +1756,7 @@ class ChatServer:
         """
         chat = self._chat(request)
         inputs = _timing_inputs(await self._json(request))
-        self._require_idle(chat)
+        await self._require_idle(chat)
         run = self._run_of(chat)
         action = partial(record_timing_live, run, **inputs)
         recorded = (
@@ -2717,8 +2727,16 @@ class ChatServer:
             raise SessionFailed(f"chat {chat.chat_id} has no review behind it")
         return run
 
-    def _require_idle(self, chat: ChatSession) -> None:
-        """Refuse the two states that cannot take an engineer's turn, with the right 409."""
+    async def _require_idle(self, chat: ChatSession) -> None:
+        """Refuse the two states that cannot take an engineer's turn, with the right 409.
+
+        A chat whose turn has ended but which is still settling (`ChatSession.settling`) is
+        waited for first, up to `SETTLE_WAIT_S`, and then asked as it would be a moment later:
+        only a turn still running, or a settle past the bound, is `TurnRunning` (002 cycle 24).
+        """
+        with anyio.move_on_after(SETTLE_WAIT_S):
+            while chat.state is ChatState.RUNNING and chat.settling.is_set():
+                await anyio.sleep(POLL_S)
         if chat.state is ChatState.FAILED:
             raise SessionFailed(f"chat {chat.chat_id} failed; retry it as a new session (retry_of)")
         if chat.state is ChatState.RUNNING:
@@ -2760,6 +2778,8 @@ class ChatServer:
             settled = (ChatState.AWAITING_SEND if chat.run is not None and chat.run.awaiting_send
                        else ChatState.WAITING_ENGINEER if chat.open_requests else ChatState.ENDED)
         finally:
+            # The turn has ended; a write that arrives from here until the settle waits for it.
+            chat.settling.set()
             chat.stop_requested.clear()
             if settled is ChatState.AWAITING_SEND and chat.run is not None:
                 chat.run.release_bridge()
@@ -2780,6 +2800,7 @@ class ChatServer:
             self._render_report(chat)
             if settled is not None:
                 self._settle(chat, settled)
+            chat.settling.clear()
 
     def _settle(self, chat: ChatSession, state: ChatState) -> None:
         """Move the chat, unless a shutdown already moved it somewhere terminal."""

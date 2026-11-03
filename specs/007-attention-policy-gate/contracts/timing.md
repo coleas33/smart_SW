@@ -113,6 +113,12 @@ spaces only, so the page posts all six, 0 typed for none, and never `null`; a li
 file under the form's heading, `labels.timing_form.all_six`, says to type all six. This route's
 rules are unchanged: `null` still keeps what is recorded.
 
+*Amended 2026-11-03 (002 cycle 24; 002
+[contracts/chat-api.md](../../002-task-pane-assistant/contracts/chat-api.md), its concurrency
+note):* the route no longer answers `409 TurnRunning` in that moment: a save sent after the turn's
+`session.ended` waits for the backend to write the report, up to `SETTLE_WAIT_S`, 5 s, and is
+recorded then. The page's one retry stays, for a save refused past the bound.
+
 ## 4. The ledger column
 
 `adoption.METRICS["median_net_saved_minutes"]` reads `scorecard.aggregate.median_net_saved_minutes`
