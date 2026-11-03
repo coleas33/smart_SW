@@ -58,6 +58,10 @@ namespace SwReview.AddIn.Tests;
 ///
 /// *Changed 2026-11-03 (007 T099; cycle 20's Tier 2 review):* `all_six` is the words file's new line, which says to type
 /// them once known, and that each replaces what is recorded.
+///
+/// *Changed 2026-11-03 (002 T402; cycle 23):* `errors` gains `IllegalTransition`, `DecisionAlreadyRecorded` and
+/// `AlreadyDeferred`, the words file's own sentences for the refused presses that said to reload the review: each says what
+/// is recorded and what the engineer can do.
 /// </summary>
 internal static class LabelsSample
 {
@@ -127,6 +131,20 @@ internal static class LabelsSample
 
     /// <summary>A press repeated without an outcome refused (roadmap hole H-c-010): the words file's sentence for it.</summary>
     public const string OutcomeNeeded = "Pick an outcome first, then press the same button again.";
+
+    /// <summary>A different decision on an Accept or a Reject refused (002 cycle 23): the words file's sentence for it.</summary>
+    public const string IllegalTransition =
+        "That finding already has a decision, and an Accept or a Reject is final. The one recorded stands and is shown again; the card cannot change it.";
+
+    /// <summary>
+    /// The decision recorded, pressed again with nothing new to record - a pass pressed again among them - refused (002 cycle
+    /// 23): the words file's sentence for it.
+    /// </summary>
+    public const string DecisionAlreadyRecorded = "That decision is already recorded, so nothing changed.";
+
+    /// <summary>Defer pressed again on a Defer that holds a triage refused (002 cycle 23): the words file's sentence for it.</summary>
+    public const string AlreadyDeferred =
+        "That finding is already deferred, with its triage. When you decide, Accept or Reject keeps that triage, or takes the one you pick.";
 
     /// <summary>
     /// The minutes form's word for each human timing input (feature 007, cycle 18), keyed by `TIMING_INPUTS` in their order:
@@ -297,6 +315,9 @@ internal static class LabelsSample
                 { "RunRootRefused", RunRootRefused },
                 { "TriageAlreadyRecorded", TriageAlreadyRecorded },
                 { "OutcomeNeeded", OutcomeNeeded },
+                { "IllegalTransition", IllegalTransition },
+                { "DecisionAlreadyRecorded", DecisionAlreadyRecorded },
+                { "AlreadyDeferred", AlreadyDeferred },
                 { "InvalidTiming", InvalidTiming },
                 { "HttpError", HttpError },
             }

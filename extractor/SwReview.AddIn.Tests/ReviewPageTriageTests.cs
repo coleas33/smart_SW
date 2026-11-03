@@ -104,6 +104,13 @@ namespace SwReview.AddIn.Tests;
 /// may name `first_shown`, the date an earlier review of the same document first showed it, and the card's head says so under
 /// the title in the backend's words (`labels.first_shown`), the date filled in as characters - live, after a review switch or a
 /// reload and on a read-only restore, whose snapshots name it as the events did. A body without it, or no labels, draws nothing.
+///
+/// Refused presses stop telling the engineer to reload (002 T402; cycle 23): a different decision on an Accept or a Reject
+/// (`IllegalTransition`), the decision recorded pressed again with nothing new (`DecisionAlreadyRecorded`) and Defer again on a
+/// Defer that holds a triage (`AlreadyDeferred`) each print their class's sentence under the record, which says what is recorded
+/// and what the engineer can do, and the typed note stays in the box. A refusal of the record names the disposition as it
+/// stands, which the card draws - its sentence above the refusal, its triage pressed, the head's line - and keeps as the
+/// finding's record, so a decision another client recorded is the one shown; the note box is left as typed.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -1878,6 +1885,146 @@ public sealed class ReviewPageTriageTests
     }
 
     /// <summary>
+    /// 002 T402 (cycle 23): each press refused with a sentence that said to reload the review - a reload draws the note box from
+    /// the record, losing the note typed for the press - says what is recorded and what the engineer can do, under the record,
+    /// and the typed note stays in the box. F-001 is accepted with `new and real`, and Reject pressed is refused as
+    /// `409 IllegalTransition`, an Accept being final; F-002, a pass accepted with no triage, has Accept pressed again,
+    /// `409 DecisionAlreadyRecorded`; F-003 is deferred with `wrong`, which its card shows pressed, and Defer pressed again is
+    /// `409 AlreadyDeferred`. Each refusal names the record, as the backend's does. Each card shows its record above its
+    /// class's sentence, its recorded triage pressed and the typed note; and F-003's Accept, pressed next, posts the typed note
+    /// with the triage its Defer holds.
+    /// </summary>
+    [Fact]
+    public void EachRefusalThatSaidToReloadSaysWhatIsRecordedAndKeepsTheTypedNote()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            const string Typed = "FICT first shown at an earlier sitting";
+            Dictionary<string, object?> accepted = Disposition("accepted", "FICT first note", "new_and_real");
+            Dictionary<string, object?> passed = Disposition("accepted", string.Empty, null);
+            Dictionary<string, object?> deferred = Disposition("deferred", string.Empty, "wrong");
+            var cards = new[]
+            {
+                (Id: "F-001", Action: "reject", Class: "IllegalTransition", Words: LabelsSample.IllegalTransition, Recorded: accepted,
+                    Record: Sentence("accepted", "new_and_real", "FICT first note"), Triage: new[] { "new_and_real" },
+                    Message: "FICT finding F-001 already has a terminal disposition ('accepted'); it cannot be changed"),
+                (Id: "F-002", Action: "accept", Class: "DecisionAlreadyRecorded", Words: LabelsSample.DecisionAlreadyRecorded, Recorded: passed,
+                    Record: "Disposition: accepted by " + Engineer + " at " + RecordedAt, Triage: Array.Empty<string>(),
+                    Message: "FICT finding F-002 is already accepted; 'accepted' again with no triage changes nothing"),
+                (Id: "F-003", Action: "defer", Class: "AlreadyDeferred", Words: LabelsSample.AlreadyDeferred, Recorded: deferred,
+                    Record: Sentence("deferred", "wrong", string.Empty), Triage: new[] { "wrong" },
+                    Message: "FICT finding F-003 is deferred with its triage ('wrong'); it can only move to accepted or rejected, not 'deferred' again, and either keeps that triage unless it names another"),
+            };
+            await Reviewed(driver, Finding("F-001", accepted), Pass("F-002", passed), Finding("F-003", deferred));
+            foreach (var card in cards)
+            {
+                await driver.Route("POST", DispositionPath(card.Id), 409, Refused(card.Class, card.Message, card.Recorded));
+                await Note(driver, card.Id, Typed);
+                await Decide(driver, card.Id, card.Action);
+            }
+
+            foreach (var card in cards)
+            {
+                JsonElement refused = await driver.Read(ReadCard(card.Id));
+                Assert.Equal("card-status bad", refused.GetProperty("statusClass").GetString());
+                Assert.Equal(card.Class, refused.GetProperty("refusalClass").GetString());
+                Assert.Equal(card.Words, refused.GetProperty("refusal").GetString());
+                Assert.Equal(card.Record, refused.GetProperty("record").GetString());
+                Assert.True(refused.GetProperty("recordFirst").GetBoolean(), card.Id + "'s record is not above the refusal.");
+                Assert.Equal(card.Triage, Pressed(refused));
+                Assert.Equal(Typed, await NoteBox(driver, card.Id));
+            }
+
+            await driver.Route("POST", DispositionPath("F-003"), 200, Finding("F-003", Disposition("accepted", Typed, "wrong")));
+            await driver.ClearCalls();
+            await Decide(driver, "F-003", "accept");
+            Assert.Equal("decision=accepted, note=" + Typed + ", triage=wrong", Body(Assert.Single(await DispositionCalls(driver))));
+        });
+    }
+
+    /// <summary>
+    /// 002 T402 (cycle 23): the page's record of a finding can be behind the backend's - its stream closes at the session's end,
+    /// so a decision another client records after it is not seen - and a refusal of the record names the disposition as it
+    /// stands, which the card then shows. F-001 is undecided here, its head saying it has no triage, while another client has
+    /// accepted it with `real but already known`. The engineer types a note, picks `new and real` and presses Reject, refused
+    /// as `409 IllegalTransition` naming that Accept: the card shows the Accept above the class's sentence, `real but already
+    /// known` pressed and no no-triage line, and keeps the typed note. A press refused next with no record named
+    /// (`409 TurnRunning`) shows the same Accept above it: the page keeps what the refusal named as the finding's record.
+    /// </summary>
+    [Fact]
+    public void ARefusalThatNamesAnotherRecordDrawsTheCardFromItAndKeepsTheTypedNote()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            const string Typed = "FICT first shown at an earlier sitting";
+            var elsewhere = new Dictionary<string, object?>
+            {
+                { "decision", "accepted" },
+                { "note", "FICT decided elsewhere" },
+                { "by", "FICT-ENG-2" },
+                { "at", RecordedAt },
+                { "triage", "already_known" },
+            };
+            string record = "Disposition: accepted (" + Word("already_known") + ") by FICT-ENG-2 at " + RecordedAt + " - FICT decided elsewhere";
+            await Reviewed(driver, Finding("F-001"));
+            Assert.Equal(LabelsSample.NoTriageUndecided, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("text").GetString());
+            await driver.Route(
+                "POST",
+                DispositionPath("F-001"),
+                409,
+                Refused("IllegalTransition", "FICT finding F-001 already has a terminal disposition ('accepted'); it cannot be changed", elsewhere));
+            await Note(driver, "F-001", Typed);
+            await Press(driver, "F-001", "new_and_real");
+            await Decide(driver, "F-001", "reject");
+
+            JsonElement refused = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(record, refused.GetProperty("record").GetString());
+            Assert.True(refused.GetProperty("recordFirst").GetBoolean(), "the record named is not above the refusal.");
+            Assert.Equal(LabelsSample.IllegalTransition, refused.GetProperty("refusal").GetString());
+            Assert.Equal(new[] { "already_known" }, Pressed(refused));
+            Assert.Equal(0, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("count").GetInt32());
+            Assert.Equal(Typed, await NoteBox(driver, "F-001"));
+
+            await driver.Route("POST", DispositionPath("F-001"), 409, TurnRunning);
+            await Decide(driver, "F-001", "accept");
+
+            JsonElement again = await driver.Read(ReadCard("F-001"));
+            Assert.Equal("TurnRunning", again.GetProperty("refusalClass").GetString());
+            Assert.Equal(record, again.GetProperty("record").GetString());
+            Assert.Equal(new[] { "already_known" }, Pressed(again));
+            Assert.Equal(Typed, await NoteBox(driver, "F-001"));
+        });
+    }
+
+    /// <summary>
+    /// 002 T402 (cycle 23) with owner decision 193A: a decision recorded ends the line a cleared one left, and so does one a
+    /// refusal names. F-001's Accept was cleared by a re-run after an answer, so its card is undecided under the cleared line;
+    /// another client has since rejected it with `wrong`. The engineer's Accept is refused as `409 IllegalTransition` naming
+    /// that Reject: the card shows the Reject above the class's sentence, `wrong` pressed, and no cleared line.
+    /// </summary>
+    [Fact]
+    public void ARefusalThatNamesADecisionEndsTheClearedLine()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            await DecidedThenFolded(driver, true);
+            await driver.Route(
+                "POST",
+                DispositionPath("F-001"),
+                409,
+                Refused("IllegalTransition", "FICT finding F-001 already has a terminal disposition ('rejected'); it cannot be changed", RejectedWrong()));
+            await Decide(driver, "F-001", "accept");
+
+            JsonElement card = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(JsonValueKind.Null, card.GetProperty("cleared").ValueKind);
+            Assert.Equal(Sentence("rejected", "wrong", "FICT not a problem"), card.GetProperty("record").GetString());
+            Assert.True(card.GetProperty("recordFirst").GetBoolean(), "the record named is not above the refusal.");
+            Assert.Equal(new[] { "wrong" }, Pressed(card));
+            Assert.Equal(LabelsSample.IllegalTransition, card.GetProperty("refusal").GetString());
+        });
+    }
+
+    /// <summary>
     /// Cycle 11's Tier 2 review (002 T368; owner decision 198A): a late triage keeps the note recorded first, so a different note
     /// sent with it is not kept, and the card says so in one line of the backend's words after the reply's sentence - where the
     /// box, which shows the recorded note and so invites the edit, goes back to it. F-001 is deferred with a note and no triage;
@@ -2972,6 +3119,16 @@ public sealed class ReviewPageTriageTests
     /// <summary>A refusal's body, as the route sends one.</summary>
     private static string Refusal(string errorClass, string message, bool retryable) =>
         JsonSerializer.Serialize(new { error_class = errorClass, message, retryable });
+
+    /// <summary>A refusal of the record, as the route sends one since cycle 23: not retryable, naming the disposition as it stands.</summary>
+    private static string Refused(string errorClass, string message, Dictionary<string, object?> disposition) =>
+        JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            { "error_class", errorClass },
+            { "message", message },
+            { "retryable", false },
+            { "disposition", disposition },
+        });
 
     /// <summary>A run folder's read-only snapshot: one finding accepted with a triage, one undecided, no ranking.</summary>
     private static string RestoredSnapshot() => Snapshot(

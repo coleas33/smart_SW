@@ -40,6 +40,11 @@ decision and never inferred from it (002 research, 185A). What this pins:
   as before, with a triage or none, its message naming the triage. Cycle 15's Tier 2 review: on
   a flagged finding only, a pass being refused as before; and a decision sent with no note keeps
   the note recorded.
+- **a refusal that said to reload** (002 T402, cycle 23): the decision recorded, sent again with
+  nothing new to record - a pass pressed again, or an Accept or Reject that holds a triage sent
+  with none - and Defer again on a Defer that holds a triage are each refused with a `ValueError`
+  of its own class, whose message says what is recorded and what can follow; a different decision
+  on an Accept or a Reject stays a plain `ValueError`.
 
 Every fixture is fictional: FICT names, and an explicit `by` on every record.
 """
@@ -417,7 +422,6 @@ def test_a_deferred_finding_takes_a_late_triage_and_stays_deferred(tmp_path: Pat
     [
         ([("accepted", "wrong")], ("accepted", "wrong"), TERMINAL, True),
         ([("accepted", "wrong")], ("accepted", "already_known"), TERMINAL, True),
-        ([("accepted", "wrong")], ("accepted", None), TERMINAL, False),
         (
             [("rejected", None), ("rejected", "wrong")],
             ("rejected", "already_known"),
@@ -428,18 +432,15 @@ def test_a_deferred_finding_takes_a_late_triage_and_stays_deferred(tmp_path: Pat
         ([("rejected", None)], ("accepted", "wrong"), TERMINAL, False),
         ([("accepted", "wrong")], ("rejected", "wrong"), TERMINAL, False),
         ([("accepted", None)], ("rejected", None), TERMINAL, False),
-        ([("deferred", "wrong")], ("deferred", "already_known"), "is deferred", False),
     ],
     ids=[
         "the-same-triage-again",
         "another-triage",
-        "the-same-decision-with-none",
         "a-second-late-triage",
         "another-triage-on-a-reject",
         "another-decision-with-a-triage",
         "another-decision-on-a-triage",
         "another-decision",
-        "a-defer-again-holding-a-triage",
     ],
 )
 def test_a_second_triage_or_another_decision_is_still_refused(
@@ -480,7 +481,16 @@ def test_a_second_triage_or_another_decision_is_still_refused(
     triage, `TriageAlreadyRecordedError`; it is a plain `ValueError` again, the default 198A kept
     (002 research, H-c-009), since that class's sentence, a triage "is recorded only once", is
     untrue of a Defer, whose triage a later Accept or Reject replaces
-    (`test_a_defer_holding_a_triage_is_refused_another_defer_naming_it`)."""
+    (`test_a_defer_holding_a_triage_is_refused_another_defer_naming_it`).
+
+    *Changed 2026-11-03 on purpose (002 T402; cycle 23):* the cases
+    `the-same-decision-with-none` and `a-defer-again-holding-a-triage` move to the tests that
+    assert their own class and message, neither of which says to reload any more:
+    `test_the_decision_recorded_sent_again_with_nothing_new_says_it_is_already_recorded`
+    (`DecisionAlreadyRecordedError`) and
+    `test_a_defer_holding_a_triage_is_refused_another_defer_naming_it` (`AlreadyDeferredError`),
+    which already held the second. This test keeps the second triage and a different decision,
+    whose classes stay as they were."""
     run_dir = run_folder(tmp_path)
     for decision, triage in first:
         apply_disposition(run_dir, "F-001", decision, "FICT note", BY, at=FIRST_AT, triage=triage)
@@ -525,10 +535,18 @@ def test_the_same_decision_again_without_an_outcome_says_to_pick_one_first(
 
 
 @pytest.mark.parametrize(
-    "triage", [None, "wrong", "already_known"], ids=["with-none", "with-the-same", "with-another"]
+    ("finding_id", "triage"),
+    [
+        ("F-001", None),
+        ("F-001", "wrong"),
+        ("F-001", "already_known"),
+        ("F-004", None),
+        ("F-004", "wrong"),
+    ],
+    ids=["with-none", "with-the-same", "with-another", "a-pass-with-none", "a-pass-with-the-miss"],
 )
 def test_a_defer_holding_a_triage_is_refused_another_defer_naming_it(
-    tmp_path: Path, triage: str | None
+    tmp_path: Path, finding_id: str, triage: str | None
 ) -> None:
     """Roadmap hole H-c-010 (002 T376): a Defer that holds a triage, sent Defer again - with none
     or another - is refused as before, with a plain `ValueError`: its outcome is recorded, so none
@@ -541,20 +559,28 @@ def test_a_defer_holding_a_triage_is_refused_another_defer_naming_it(
     since it shows it pressed: refused alike, a plain `ValueError`. The review had made the two
     cases with a triage `TriageAlreadyRecordedError`; the check undid it, since that class's
     sentence, a triage "is recorded only once", is untrue of a Defer, whose triage a later Accept
-    or Reject replaces, and 198A kept this refusal as it was (002 research, H-c-009)."""
-    run_dir = run_folder(tmp_path)
-    apply_disposition(run_dir, "F-001", "deferred", "FICT note", BY, at=FIRST_AT, triage="wrong")
+    or Reject replaces, and 198A kept this refusal as it was (002 research, H-c-009).
+
+    *Changed 2026-11-03 on purpose (002 T402; cycle 23):* refused with a `ValueError` of its own
+    class, `AlreadyDeferredError`, so the route can answer it with a sentence that says what the
+    later Accept or Reject does, where `IllegalTransition`'s said to reload the review; its message
+    says it too - either keeps the triage unless it names another. Two cases added, a pass deferred
+    with the miss, sent Defer again with none or with the miss, refused alike; the folder is
+    `pass_folder`'s, whose F-001 is flagged as `run_folder`'s is."""
+    run_dir = pass_folder(tmp_path)
+    apply_disposition(run_dir, finding_id, "deferred", "FICT note", BY, at=FIRST_AT, triage="wrong")
     before = folder_bytes(run_dir)
 
     with pytest.raises(ValueError) as refused:
         apply_disposition(
-            run_dir, "F-001", "deferred", "FICT later note", OTHER_BY, at=LATER_AT, triage=triage
+            run_dir, finding_id, "deferred", "FICT later note", OTHER_BY, at=LATER_AT, triage=triage
         )
 
-    assert type(refused.value) is ValueError
+    # Read from the module, so a missing class fails these cases alone and not the collection.
+    assert type(refused.value) is getattr(dispositions, "AlreadyDeferredError", None)
     assert str(refused.value) == (
-        "finding F-001 is deferred with its triage ('wrong'); it can only move to accepted or "
-        "rejected, not 'deferred' again"
+        f"finding {finding_id} is deferred with its triage ('wrong'); it can only move to accepted "
+        "or rejected, not 'deferred' again, and either keeps that triage unless it names another"
     )
     assert folder_bytes(run_dir) == before
 
@@ -754,35 +780,56 @@ def test_a_pass_takes_wrong_or_none_and_a_late_wrong_once(tmp_path: Path) -> Non
 
 
 @pytest.mark.parametrize(
-    ("decision", "refusal"),
+    ("finding_id", "decision", "held"),
     [
-        ("accepted", f"finding F-004 already has a {TERMINAL} ('accepted'); it cannot be changed"),
-        ("rejected", f"finding F-004 already has a {TERMINAL} ('rejected'); it cannot be changed"),
-        (
-            "deferred",
-            "finding F-004 is deferred; it can only move to accepted or rejected, not 'deferred' "
-            "again",
-        ),
+        ("F-004", "accepted", None),
+        ("F-004", "rejected", None),
+        ("F-004", "deferred", None),
+        ("F-004", "accepted", "wrong"),
+        ("F-001", "accepted", "already_known"),
+        ("F-001", "rejected", "wrong"),
     ],
-    ids=["accepted", "rejected", "deferred"],
+    ids=[
+        "a-pass-accepted",
+        "a-pass-rejected",
+        "a-pass-deferred",
+        "a-pass-accepted-with-the-miss",
+        "an-accept-with-a-triage",
+        "a-reject-with-a-triage",
+    ],
 )
-def test_a_pass_decided_without_a_triage_is_refused_the_same_decision_as_before(
-    tmp_path: Path, decision: str, refusal: str
+def test_the_decision_recorded_sent_again_with_nothing_new_says_it_is_already_recorded(
+    tmp_path: Path, finding_id: str, decision: str, held: str | None
 ) -> None:
     """Cycle 15's Tier 2 review: a pass decided with no triage, sent the same decision again with
-    none - a note typed and the button pressed again, or a double click - is refused with a plain
-    `ValueError`, as before H-c-010, not `OutcomeNeededError`: a pass has no no-triage line, and
-    the one outcome its card offers is the miss, so a sentence asking for an outcome would have the
-    engineer record a miss on a pass judged fine. Nothing is written."""
+    none - a note typed and the button pressed again, or a double click - is refused, not with
+    `OutcomeNeededError`: a pass has no no-triage line, and the one outcome its card offers is the
+    miss, so a sentence asking for an outcome would have the engineer record a miss on a pass
+    judged fine. Nothing is written.
+
+    *Changed 2026-11-03 on purpose (002 T402; cycle 23):* renamed from
+    `test_a_pass_decided_without_a_triage_is_refused_the_same_decision_as_before`. The refusal is a
+    `ValueError` of its own class, `DecisionAlreadyRecordedError`, so the route can answer it with
+    a sentence that says the decision is already recorded, where `IllegalTransition`'s said to
+    reload the review; its message says so, naming the triage the record holds, where it named
+    the terminal rule or, on a Defer, what may follow it. Three cases added, the same press on a
+    record that holds a triage, its triage let go: a pass accepted with the miss, and a flagged
+    Accept and Reject - the case `the-same-decision-with-none`, which
+    `test_a_second_triage_or_another_decision_is_still_refused` held as a plain `ValueError`."""
     run_dir = pass_folder(tmp_path)
-    apply_disposition(run_dir, "F-004", decision, "FICT note", BY, at=FIRST_AT)
+    apply_disposition(run_dir, finding_id, decision, "FICT note", BY, at=FIRST_AT, triage=held)
     before = folder_bytes(run_dir)
 
     with pytest.raises(ValueError) as refused:
-        apply_disposition(run_dir, "F-004", decision, "FICT later note", OTHER_BY, at=LATER_AT)
+        apply_disposition(run_dir, finding_id, decision, "FICT later note", OTHER_BY, at=LATER_AT)
 
-    assert type(refused.value) is ValueError
-    assert str(refused.value) == refusal
+    # Read from the module, so a missing class fails these cases alone and not the collection.
+    assert type(refused.value) is getattr(dispositions, "DecisionAlreadyRecordedError", None)
+    with_triage = f" with its triage ({held!r})" if held is not None else ""
+    assert str(refused.value) == (
+        f"finding {finding_id} is already {decision}{with_triage}; {decision!r} again with no "
+        "triage changes nothing"
+    )
     assert folder_bytes(run_dir) == before
 
 

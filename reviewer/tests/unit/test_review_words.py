@@ -442,6 +442,34 @@ def test_a_press_repeated_without_an_outcome_says_to_pick_one_first() -> None:
     assert labels == OUTCOME_NEEDED
 
 
+REFUSED_PRESSES = {
+    "IllegalTransition": (
+        "That finding already has a decision, and an Accept or a Reject is final. The one recorded "
+        "stands and is shown again; the card cannot change it."
+    ),
+    "DecisionAlreadyRecorded": "That decision is already recorded, so nothing changed.",
+    "AlreadyDeferred": (
+        "That finding is already deferred, with its triage. When you decide, Accept or Reject "
+        "keeps that triage, or takes the one you pick."
+    ),
+}
+"""The classes the disposition route refuses the presses with whose sentence said to reload the
+review, a reload drawing the note box from the record and so losing a note typed for the press
+(002 cycle 23; H-c-010's left-open item): a different decision on an Accept or a Reject, which is
+final and which no control on the page clears or changes; the decision recorded, sent again with
+nothing new to record, a pass pressed again among them; and Defer again on a Defer that holds a
+triage, which a later Accept or Reject keeps or replaces. Each says what is recorded and what the
+engineer can do; the card shows the record above it, drawn from the refusal."""
+
+
+def test_each_refused_press_says_what_is_recorded_and_never_to_reload() -> None:
+    errors = load_words().labels.errors
+    labels = {key: errors.get(key) for key in REFUSED_PRESSES}
+    assert labels == REFUSED_PRESSES
+    for key in (*REFUSED_PRESSES, *TRIAGE_ALREADY_RECORDED, *OUTCOME_NEEDED):
+        assert "reload" not in errors[key].lower(), key
+
+
 def test_a_pass_offers_its_one_triage_worded_as_a_miss() -> None:
     """Owner decision 187A (002 FR-031): a pass - 'Checked, no issue' - takes no triage but
     `wrong`, and its card offers that one, worded as the miss it is counted as, apart from the

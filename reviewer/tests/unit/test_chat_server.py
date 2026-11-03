@@ -3053,7 +3053,12 @@ def test_a_second_triage_is_a_409_of_its_own_and_writes_nothing(
     second one - another, or the same again - as `409 TriageAlreadyRecorded`, not retryable, its
     message naming the triage recorded, so the page can say the recorded one stands. Every other
     refusal stays `409 IllegalTransition`: an Accept, with a triage or without, a Reject with none
-    and a Defer. None of them writes anything."""
+    and a Defer. None of them writes anything.
+
+    *Changed 2026-11-03 on purpose (002 T402; cycle 23):* the Reject sent again with none, its
+    triage let go, is `409 DecisionAlreadyRecorded`, a class of its own whose sentence says the
+    decision is already recorded, where `IllegalTransition`'s said to reload the review; a
+    different decision, an Accept or a Defer, stays `IllegalTransition`."""
     url = disposition_url(chat_with_a_finding, run_dir)
     first = client.post(
         url,
@@ -3081,7 +3086,7 @@ def test_a_second_triage_is_a_409_of_its_own_and_writes_nothing(
         (409, "TriageAlreadyRecorded"),
         (409, "IllegalTransition"),
         (409, "IllegalTransition"),
-        (409, "IllegalTransition"),
+        (409, "DecisionAlreadyRecorded"),
         (409, "IllegalTransition"),
     ]
     assert [response.json()["retryable"] for response in refused] == [False] * len(refused)
@@ -3098,7 +3103,11 @@ def test_the_same_decision_again_without_an_outcome_is_a_409_of_its_own(
     its message naming the repair, so the page can say to pick an outcome first, where
     `IllegalTransition`'s sentence says to reload the review and a reload loses the note typed for
     the retry; neither writes anything. Once the Accept takes its late triage, an Accept again
-    with none is `409 IllegalTransition`, as before."""
+    with none is `409 IllegalTransition`, as before.
+
+    *Changed 2026-11-03 on purpose (002 T402; cycle 23):* that Accept again with none, its triage
+    recorded, is `409 DecisionAlreadyRecorded`, whose sentence says the decision is already
+    recorded, where `IllegalTransition`'s said to reload the review; it still writes nothing."""
     url = disposition_url(chat_with_a_finding, run_dir)
     pressed = {"note": "FICT first shown at an earlier sitting", "by": "FICT-ENG"}
     deferred = client.post(url, json={"decision": "deferred", "note": "", "by": "FICT-ENG"})
@@ -3132,11 +3141,11 @@ def test_the_same_decision_again_without_an_outcome_is_a_409_of_its_own(
     triaged = folder_files(run_dir)
     again = client.post(url, json={"decision": "accepted", **pressed})
 
-    assert (again.status_code, again.json()["error_class"]) == (409, "IllegalTransition")
+    assert (again.status_code, again.json()["error_class"]) == (409, "DecisionAlreadyRecorded")
     assert folder_files(run_dir) == triaged
 
 
-def test_a_defer_again_on_one_that_holds_a_triage_is_still_an_illegal_transition(
+def test_a_defer_again_on_one_that_holds_a_triage_says_what_its_later_decision_does(
     client: TestClient, run_dir: Path, chat_with_a_finding: str
 ) -> None:
     """Cycle 15's Tier 2 review, through the route the pane presses: a deferred card that holds a
@@ -3150,7 +3159,13 @@ def test_a_defer_again_on_one_that_holds_a_triage_is_still_an_illegal_transition
     `test_a_defer_again_with_a_triage_on_one_that_holds_one_is_a_second_triage`, whose two posts
     with a triage were `409 TriageAlreadyRecorded`, the review's change, which reversed that
     default unsaid; `IllegalTransition`'s sentence, which says to reload, is H-c-010's *Left
-    open*."""
+    open*.
+
+    *Changed 2026-11-03 on purpose (002 T402; cycle 23):* renamed from
+    `test_a_defer_again_on_one_that_holds_a_triage_is_still_an_illegal_transition`. Each is
+    `409 AlreadyDeferred`, a class of its own (the record's `AlreadyDeferredError`), not
+    retryable, whose sentence says what the later Accept or Reject does, where
+    `IllegalTransition`'s said to reload the review; each message says it too."""
     url = disposition_url(chat_with_a_finding, run_dir)
     deferred = client.post(
         url, json={"decision": "deferred", "note": "", "by": "FICT-ENG", "triage": "wrong"}
@@ -3165,11 +3180,12 @@ def test_a_defer_again_on_one_that_holds_a_triage_is_still_an_illegal_transition
     ]
 
     assert [(response.status_code, response.json()["error_class"]) for response in refused] == [
-        (409, "IllegalTransition")
+        (409, "AlreadyDeferred")
     ] * 3
+    assert [response.json()["retryable"] for response in refused] == [False] * 3
     assert [response.json()["message"] for response in refused] == [
         "finding F-001 is deferred with its triage ('wrong'); it can only move to accepted or "
-        "rejected, not 'deferred' again"
+        "rejected, not 'deferred' again, and either keeps that triage unless it names another"
     ] * 3
     assert folder_files(run_dir) == before
 
@@ -3231,14 +3247,21 @@ def test_a_pass_takes_no_triage_but_wrong_on_the_live_route(
     assert saved.disposition is not None and saved.disposition.triage == "wrong"
 
 
-def test_a_pass_accepted_again_without_an_outcome_is_still_an_illegal_transition(
+def test_a_pass_accepted_again_without_an_outcome_says_it_is_already_recorded(
     app: Any, client: TestClient, run_dir: Path, chat_with_a_finding: str
 ) -> None:
     """Cycle 15's Tier 2 review, through the route the pane presses: a pass accepted with no
     triage, Accept pressed again with none - a note typed meanwhile, or a double click - is
     `409 IllegalTransition`, as before H-c-010, not `409 OutcomeNeeded`, whose sentence asks for
     an outcome where the pass's card offers only the miss; nothing is written. The chat's one
-    finding is made a pass in the session the run holds, which is the session the route reads."""
+    finding is made a pass in the session the run holds, which is the session the route reads.
+
+    *Changed 2026-11-03 on purpose (002 T402; cycle 23):* renamed from
+    `test_a_pass_accepted_again_without_an_outcome_is_still_an_illegal_transition`. The press is
+    `409 DecisionAlreadyRecorded`, a class of its own (the record's
+    `DecisionAlreadyRecordedError`), not retryable, whose sentence says the decision is already
+    recorded, where `IllegalTransition`'s said to reload the review; its message says so, and the
+    body names the disposition recorded, which the page draws the card's record from."""
     run = app.state.server.chats[UUID(chat_with_a_finding)].run
     run.session.findings[0] = run.session.findings[0].model_copy(
         update={"status": "checked_within_scope", "severity": "info"}
@@ -3252,11 +3275,83 @@ def test_a_pass_accepted_again_without_an_outcome_is_still_an_illegal_transition
         url, json={"decision": "accepted", "note": "FICT typed note", "by": "FICT-ENG"}
     )
 
-    assert (again.status_code, again.json()["error_class"]) == (409, "IllegalTransition")
+    assert (again.status_code, again.json()["error_class"]) == (409, "DecisionAlreadyRecorded")
+    assert again.json()["retryable"] is False
     assert again.json()["message"] == (
+        "finding F-001 is already accepted; 'accepted' again with no triage changes nothing"
+    )
+    assert again.json()["disposition"] == accepted.json()["disposition"]
+    assert folder_files(run_dir) == before
+
+
+def test_each_refusal_of_the_record_names_the_disposition_as_it_stands(
+    client: TestClient, run_dir: Path, chat_with_a_finding: str
+) -> None:
+    """002 T402 (cycle 23), through the route the pane presses: every refusal the record makes
+    names the finding's disposition as the record holds it, `disposition` beside `error_class`,
+    `message` and `retryable`, so the page draws the card's record from the backend's and not from
+    a memory that another client's decision may have overtaken once its stream closed. A Defer
+    with no triage, then with one, then an Accept, each recorded by one client, and each press of
+    another refused in turn: Defer again with none (`OutcomeNeeded`), Defer again on the Defer
+    that holds a triage (`AlreadyDeferred`), a Reject on the Accept (`IllegalTransition`, its
+    message as before), another triage on it (`TriageAlreadyRecorded`) and the Accept again with
+    none (`DecisionAlreadyRecorded`). None is retryable or writes anything. A refusal that is not
+    the record's - an unknown finding, a decision or a triage the route does not know - names no
+    disposition."""
+    url = disposition_url(chat_with_a_finding, run_dir)
+    elsewhere = {"note": "FICT decided elsewhere", "by": "FICT-ENG-2"}
+    typed = {"note": "FICT typed note", "by": "FICT-ENG"}
+    refusals: list[tuple[Any, dict[str, Any]]] = []
+
+    def record(**press: Any) -> dict[str, Any]:
+        reply = client.post(url, json={**elsewhere, **press})
+        assert reply.status_code == 200, reply.text
+        disposition: dict[str, Any] = reply.json()["disposition"]
+        return disposition
+
+    def refuse(recorded: dict[str, Any], **press: Any) -> None:
+        before = folder_files(run_dir)
+        refusals.append((client.post(url, json={**typed, **press}), recorded))
+        assert folder_files(run_dir) == before
+
+    deferred = record(decision="deferred")
+    refuse(deferred, decision="deferred")
+    triaged = record(decision="deferred", triage="wrong")
+    refuse(triaged, decision="deferred", triage="wrong")
+    accepted = record(decision="accepted")
+    refuse(accepted, decision="rejected", triage="new_and_real")
+    refuse(accepted, decision="accepted", triage="already_known")
+    refuse(accepted, decision="accepted")
+
+    assert [(response.status_code, response.json()["error_class"]) for response, _ in refusals] == [
+        (409, "OutcomeNeeded"),
+        (409, "AlreadyDeferred"),
+        (409, "IllegalTransition"),
+        (409, "TriageAlreadyRecorded"),
+        (409, "DecisionAlreadyRecorded"),
+    ]
+    assert [response.json()["retryable"] for response, _ in refusals] == [False] * 5
+    assert [response.json()["disposition"] for response, _ in refusals] == [
+        recorded for _, recorded in refusals
+    ]
+    assert accepted == {**triaged, "decision": "accepted", "at": accepted["at"]}
+    assert refusals[2][0].json()["message"] == (
         "finding F-001 already has a terminal disposition ('accepted'); it cannot be changed"
     )
-    assert folder_files(run_dir) == before
+
+    finding_id = load_session(run_dir / "session.json").findings[0].id
+    others = [
+        client.post(url.replace(finding_id, "F-404"), json={"decision": "rejected", **typed}),
+        client.post(url, json={"decision": "approved", **typed}),
+        client.post(url, json={"decision": "rejected", "triage": "maybe", **typed}),
+    ]
+
+    assert [(response.status_code, response.json()["error_class"]) for response in others] == [
+        (404, "UnknownFinding"),
+        (400, "InvalidDecision"),
+        (400, "InvalidTriage"),
+    ]
+    assert all("disposition" not in response.json() for response in others)
 
 
 # --- a check run again after an answer (002 T326; owner decisions 189A and 191A) ------------------
