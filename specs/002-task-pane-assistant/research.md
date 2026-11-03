@@ -7986,7 +7986,9 @@ date, so a new problem read as old (`docs/review-backlog.md`, cycle 17).
   - The link check over the cycle's seven changed Markdown files, anchors included, 466 links
     and none broken; every changed file LF in the index. No SOLIDWORKS process, seat task, or
     paid or live test ran.
-  - The whole suites on the final tree: recorded once they run.
+  - The whole suites on the final tree (`3c3bacd1`, 2026-11-03): 19,021 passed and 5 skipped on
+    Python 3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed; no C# or page
+    file changed (T396's line).
   - *Changed 2026-11-03:* the tree above came before the Tier 2 review's fixes; their checks are
     T396's sub-item in [tasks.md](tasks.md).
   - *Done 2026-11-03, cycle 21 stacked on cycle 20:* the gates above ran on cycle 21 before it was
