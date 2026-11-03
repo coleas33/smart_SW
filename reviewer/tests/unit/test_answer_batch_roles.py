@@ -166,7 +166,12 @@ def withdrawn(events: Events) -> list[dict[str, Any]]:
 
 def announced(events: Events) -> dict[str, str]:
     """Each finding id's title as its last `finding` event named it, the display title: what a
-    withdrawal of it names (002 T382; cycle 16)."""
+    withdrawal of it names (002 T382; cycle 16).
+
+    *Changed 2026-11-03 (002 T386; cycle 16's read-only check):* a withdrawal names that title
+    with the finding's parts' names after it when it names none of them
+    (`report/titles.withdrawal_title`); `scripted_check`'s titles, "<file name> is scripted",
+    name the part's file, so here a withdrawal names just the title this reads."""
     return {body["id"]: body["title"] for kind, body in events if kind == "finding"}
 
 

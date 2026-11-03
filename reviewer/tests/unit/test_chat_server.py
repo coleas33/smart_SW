@@ -3929,7 +3929,13 @@ def withdrawn_part(folder: Path) -> list[str]:
 def announced_title(events: list[dict[str, Any]], finding_id: str) -> str:
     """The title the stream's last `finding` event announced `finding_id` with - what the live
     Transcript's "F-007 recorded: <title>" line names - which a withdrawal of it names (002 cycle
-    16)."""
+    16).
+
+    *Changed 2026-11-03 (002 T386; cycle 16's read-only check):* a withdrawal names that title
+    with the finding's parts' names after it when it names none of them
+    (`report/titles.withdrawal_title`); the titles its callers read name the part's file - the
+    scripted checks' "<file name> is scripted" (`regrading_checks`), and the mass check's, whose
+    finding `test_recheck.py`'s re-runs withdraw - so there a withdrawal names just this title."""
     return [
         event["body"]["title"]
         for event in events
