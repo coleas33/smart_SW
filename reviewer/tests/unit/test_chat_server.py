@@ -64,6 +64,7 @@ from swreview.agent.settings import (
     pane_defaults,
     pane_efficiency,
 )
+from swreview.chat import server as chat_server
 from swreview.chat.server import SESSION_FILES, _sse, build_provider, create_app
 from swreview.chat.sessions import ChatSession, ChatState
 from swreview.checks.rms.run import is_check_folder
@@ -4258,6 +4259,239 @@ def test_the_report_is_served_as_markdown(
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/markdown")
     assert response.text == (run_dir / "report.md").read_text(encoding="utf-8")
+
+
+# --- a write as the review ends (002 T406; cycle 24) ----------------------------------------------
+#
+# The runner sends `session.ended` from `finalize`, and the worker then writes `report.md` and the
+# attention record before it moves the chat out of `running`. A write the page makes in that moment,
+# on a review it shows finished, waits for the settle and is answered as it would be a moment later.
+
+SETTLE_BOUND_S = 2.0
+"""`SETTLE_WAIT_S` as the bound's two cases set it: long beside a refusal given at once, and short
+beside the 5 s the contract names, so the case that waits it out stays quick."""
+
+DECISION = {"decision": "accepted", "note": "", "by": "FICT-ENG"}
+
+
+@dataclass
+class FinalRender:
+    """A turn's final render, held: `session.ended` is on the stream and the chat is `running`."""
+
+    reached: threading.Event = field(default_factory=threading.Event)
+    release: threading.Event = field(default_factory=threading.Event)
+
+
+@pytest.fixture
+def final_render(app: Any, monkeypatch: pytest.MonkeyPatch) -> Iterator[FinalRender]:
+    """The next final render held until the test lets it go, as
+    `test_a_retry_cannot_claim_a_folder_until_the_previous_render_finishes` holds it, and let go
+    at the end whatever the test did."""
+    held = FinalRender()
+    original = app.state.server._render_report
+
+    def held_render(chat: Any) -> None:
+        if not held.reached.is_set():
+            held.reached.set()
+            assert held.release.wait(TIMEOUT_S), "the test did not release the final render"
+        original(chat)
+
+    monkeypatch.setattr(app.state.server, "_render_report", held_render)
+    yield held
+    held.release.set()
+
+
+def ended_and_still_running(
+    client: TestClient, run_dir: Path, chat_id: str, held: FinalRender
+) -> None:
+    """Wait for the held render, and check it is the moment cycle 24 is about."""
+    assert held.reached.wait(TIMEOUT_S), "the turn did not reach its final render"
+    assert types_of(run_dir)[-1] == "session.ended"
+    assert state_of(client, chat_id) == ChatState.RUNNING.value
+
+
+@pytest.fixture
+def review_ending(
+    client: TestClient, run_dir: Path, provider_control: ProviderControl, final_render: FinalRender
+) -> tuple[str, FinalRender]:
+    """A review that recorded one finding, held at its final render."""
+    provider_control.script = [
+        turn("One finding.", call("record_drawing_finding", **DRAWING_FINDING_ARGUMENTS)),
+        *text_turns(2),
+    ]
+    chat_id = start_session(client, run_dir)["chat_id"]
+    ended_and_still_running(client, run_dir, chat_id, final_render)
+    return chat_id, final_render
+
+
+def sent_as_the_review_ends(held: FinalRender, write: Callable[[], Any]) -> Any:
+    """`write` sent while the final render is held, and its answer once the render is let go. A
+    refusal comes back at once; a write that waits for the settle is still waiting half a second
+    later, which is checked before the render is let go."""
+    answered: dict[str, Any] = {}
+    sender = threading.Thread(target=lambda: answered.update(response=write()))
+    sender.start()
+    sender.join(0.5)
+    waited = sender.is_alive()
+    held.release.set()
+    sender.join(TIMEOUT_S)
+    response = answered["response"]
+    assert waited, f"answered before the chat settled: {response.status_code} {response.text}"
+    return response
+
+
+@pytest.mark.parametrize(
+    ("body", "lines"),
+    [
+        pytest.param(DECISION, "  - decision: accepted\n  - by: FICT-ENG\n", id="a decision"),
+        pytest.param(
+            {
+                "decision": "rejected",
+                "note": "FICT note pressed as the review ended",
+                "by": "FICT-ENG",
+                "triage": "already_known",
+            },
+            "  - decision: rejected\n  - triage: real but already known\n  - by: FICT-ENG\n",
+            id="a decision with its triage and note",
+        ),
+    ],
+)
+def test_a_decision_sent_as_the_review_ends_waits_for_the_settle_and_is_recorded(
+    client: TestClient,
+    run_dir: Path,
+    review_ending: tuple[str, FinalRender],
+    body: dict[str, Any],
+    lines: str,
+) -> None:
+    """002 cycle 24: a decision pressed between the runner's `session.ended` and the chat leaving
+    `running` met `409 TurnRunning` while the page said the review had finished. It waits for the
+    settle and is recorded as a decision a moment later is: in the reply, the session file, the
+    stream and `report.md`, which the route writes after the turn's own render."""
+    chat_id, held = review_ending
+    url = disposition_url(chat_id, run_dir)
+
+    response = sent_as_the_review_ends(held, lambda: client.post(url, json=body))
+
+    assert response.status_code == 200, response.text
+    recorded = response.json()["disposition"]
+    assert (recorded["decision"], recorded["note"], recorded.get("triage")) == (
+        body["decision"],
+        body["note"],
+        body.get("triage"),
+    )
+    assert state_of(client, chat_id) == ChatState.ENDED.value
+    saved = load_session(run_dir / "session.json").findings[0].disposition
+    assert saved is not None and saved.model_dump(mode="json") == recorded
+    assert recorded_dispositions(run_dir) == [recorded]
+    report = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert f"- Disposition:\n{lines}" in report
+    assert f"  - note: {body['note']}\n" in report
+
+
+def test_a_follow_up_sent_as_the_review_ends_runs_its_turn_once_the_chat_has_settled(
+    client: TestClient, run_dir: Path, review_ending: tuple[str, FinalRender]
+) -> None:
+    """A follow-up waits too (002 cycle 24), and its turn starts only once the worker has written
+    the turn's report and attention record and settled the chat, so no turn starts under them."""
+    chat_id, held = review_ending
+
+    response = sent_as_the_review_ends(
+        held, lambda: client.post(f"/sessions/{chat_id}/messages", json={"text": "and also"})
+    )
+
+    assert response.status_code == 202, response.text
+    assert settle(client, chat_id) == ChatState.ENDED.value
+    assert types_of(run_dir).count("session.ended") == 2
+
+
+def test_a_decision_sent_as_a_failing_turn_ends_meets_the_failure_not_a_running_turn(
+    client: TestClient,
+    run_dir: Path,
+    provider_control: ProviderControl,
+    final_render: FinalRender,
+) -> None:
+    """A write that waited is answered as it would be a moment later (002 cycle 24): a turn the
+    provider failed is still finalized, so its `session.ended` comes first, and the chat settles
+    `failed`, where a decision is `409 SessionFailed`. Nothing is written."""
+    provider_control.script = [
+        ScriptedTurn(
+            text="",
+            rounds=(
+                ScriptedRound(calls=(call("record_drawing_finding", **DRAWING_FINDING_ARGUMENTS),)),
+            ),
+            fails=ProviderError("FICT the provider connection dropped"),
+        )
+    ]
+    chat_id = start_session(client, run_dir)["chat_id"]
+    ended_and_still_running(client, run_dir, chat_id, final_render)
+    url = disposition_url(chat_id, run_dir)
+
+    response = sent_as_the_review_ends(final_render, lambda: client.post(url, json=DECISION))
+
+    assert (response.status_code, response.json()["error_class"]) == (409, "SessionFailed")
+    assert state_of(client, chat_id) == ChatState.FAILED.value
+    assert load_session(run_dir / "session.json").findings[0].disposition is None
+    assert recorded_dispositions(run_dir) == []
+
+
+def test_past_the_bound_a_decision_sent_as_the_review_ends_is_turn_running_and_writes_nothing(
+    client: TestClient,
+    run_dir: Path,
+    review_ending: tuple[str, FinalRender],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wait is bounded (002 cycle 24): a chat that has not settled once `SETTLE_WAIT_S` has
+    passed answers the decision as before, `409 TurnRunning` with today's message, and nothing is
+    written. The bound is set short here; the contract names 5 s."""
+    monkeypatch.setattr(chat_server, "SETTLE_WAIT_S", SETTLE_BOUND_S, raising=False)
+    chat_id, held = review_ending
+    url = disposition_url(chat_id, run_dir)
+
+    started = time.monotonic()
+    refused = client.post(url, json=DECISION)
+    waited = time.monotonic() - started
+    held.release.set()
+
+    assert settle(client, chat_id) == ChatState.ENDED.value
+    assert refused.status_code == 409
+    assert refused.json() == {
+        "error_class": "TurnRunning",
+        "message": f"chat {chat_id} is running a turn; wait for it to end",
+        "retryable": False,
+    }
+    # Half the bound: the loop's timer may fire a clock tick early, and a refusal at once takes
+    # a few milliseconds.
+    assert waited >= SETTLE_BOUND_S / 2, f"refused after {waited:.3f} s, before the bound"
+    assert load_session(run_dir / "session.json").findings[0].disposition is None
+    assert recorded_dispositions(run_dir) == []
+    report = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert "- Disposition: not yet dispositioned" in report
+
+
+def test_a_decision_while_a_turn_still_runs_is_turn_running_at_once(
+    client: TestClient,
+    run_dir: Path,
+    chat_with_a_finding: str,
+    provider_control: ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only a turn that has ended is waited for (002 cycle 24): while one still runs, a decision is
+    `409 TurnRunning` at once, as before, and not once the bound has passed."""
+    monkeypatch.setattr(chat_server, "SETTLE_WAIT_S", SETTLE_BOUND_S, raising=False)
+    url = disposition_url(chat_with_a_finding, run_dir)
+    provider_control.hold()
+    client.post(f"/sessions/{chat_with_a_finding}/messages", json={"text": "keep going"})
+    wait_until(provider_control.started.is_set, "the follow-up turn to reach the gate")
+
+    started = time.monotonic()
+    refused = client.post(url, json=DECISION)
+    took = time.monotonic() - started
+    provider_control.release()
+
+    assert settle(client, chat_with_a_finding) == ChatState.ENDED.value
+    assert (refused.status_code, refused.json()["error_class"]) == (409, "TurnRunning")
+    assert took < SETTLE_BOUND_S / 2, f"refused after {took:.3f} s: it waited"
+    assert load_session(run_dir / "session.json").findings[0].disposition is None
 
 
 # --- stopping ------------------------------------------------------------------------
