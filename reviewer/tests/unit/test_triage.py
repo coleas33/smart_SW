@@ -30,6 +30,10 @@ decision and never inferred from it (002 research, 185A). What this pins:
   decision after the summary, from the session's own stream alone, and with nothing to say keeps
   its bytes; a withdrawal of a finding the session still holds, the stream having run ahead of
   the record, is not named (cycle 10's Tier 2 review).
+- **the repair press** (002 T364, owner decision 198A, roadmap hole H-c-009): a late triage
+  keeps a note sent with it when none is recorded, and the first when one is; and a Defer
+  recorded without a triage takes one the same way, sent again with the same decision, and stays
+  deferred, while a Defer again with none is refused as before.
 
 Every fixture is fictional: FICT names, and an explicit `by` on every record.
 """
@@ -321,7 +325,13 @@ def test_a_deferred_findings_triage_is_kept_unless_the_decision_names_another(
 @pytest.mark.parametrize("decision", ["accepted", "rejected"])
 def test_a_decided_finding_without_a_triage_takes_one_once(tmp_path: Path, decision: str) -> None:
     """185A's late triage: the decision, note, `by` and `at` stay as first recorded, whatever
-    note and `by` the second call carries; only the triage is added."""
+    note and `by` the second call carries; only the triage is added.
+
+    *Changed 2026-11-02 on purpose (002 T364; owner decision 198A):* the first note stays because
+    one is recorded, no longer whatever note the second call carries: a late triage keeps a note
+    sent with it when none is recorded
+    (`test_a_late_triage_keeps_a_note_sent_with_it_when_none_was_recorded`). What this asserts is
+    unchanged."""
     run_dir = run_folder(tmp_path)
     apply_disposition(run_dir, "F-001", decision, "FICT first note", BY, at=FIRST_AT)
 
@@ -334,6 +344,66 @@ def test_a_decided_finding_without_a_triage_takes_one_once(tmp_path: Path, decis
     )
     assert find_finding(session, "F-001").disposition == expected
     assert recorded(run_dir, "F-001") == expected
+
+
+@pytest.mark.parametrize("decision", ["accepted", "rejected", "deferred"])
+@pytest.mark.parametrize(
+    ("first_note", "late_note", "kept"),
+    [
+        ("", "FICT later note", "FICT later note"),
+        (" \t", "FICT later note", "FICT later note"),
+        ("", "  ", ""),
+        ("FICT first note", "FICT later note", "FICT first note"),
+        ("FICT first note", "", "FICT first note"),
+    ],
+    ids=["none-recorded", "a-blank-one-recorded", "a-blank-one-sent", "one-recorded", "none-sent"],
+)
+def test_a_late_triage_keeps_a_note_sent_with_it_when_none_was_recorded(
+    tmp_path: Path, decision: str, first_note: str, late_note: str, kept: str
+) -> None:
+    """Owner decision 198A (002 T364): the repair press keeps a note typed with it, such as 188A's
+    date, when the decision was recorded with none, and the note first recorded when one was, as
+    185A had it. A blank note is none: one recorded takes the note sent, and one sent changes
+    nothing. The triage is recorded, and the decision, `by` and `at` stay as first recorded - for
+    a Defer's late triage too, which 198A adds."""
+    run_dir = run_folder(tmp_path)
+    apply_disposition(run_dir, "F-001", decision, first_note, BY, at=FIRST_AT)
+
+    session = apply_disposition(
+        run_dir, "F-001", decision, late_note, OTHER_BY, at=LATER_AT, triage="new_and_real"
+    )
+
+    expected = Disposition(decision=decision, note=kept, by=BY, at=FIRST_AT, triage="new_and_real")
+    assert find_finding(session, "F-001").disposition == expected
+    assert recorded(run_dir, "F-001") == expected
+
+
+def test_a_deferred_finding_takes_a_late_triage_and_stays_deferred(tmp_path: Path) -> None:
+    """Owner decision 198A (002 T364): a Defer recorded without a triage takes one when Defer is
+    sent again with it, and stays deferred - its note, `by` and `at` as first recorded - in the
+    session the call returns, in `session.json` and in `report.md`, so a finding deferred to be
+    decided later is judged without deciding it. Still deferred, it is decided later as any Defer
+    is: a Reject naming no triage keeps the one recorded."""
+    run_dir = run_folder(tmp_path)
+    apply_disposition(run_dir, "F-001", "deferred", "FICT first note", BY, at=FIRST_AT)
+
+    session = apply_disposition(
+        run_dir, "F-001", "deferred", "FICT later note", OTHER_BY, at=LATER_AT, triage="wrong"
+    )
+
+    expected = Disposition(
+        decision="deferred", note="FICT first note", by=BY, at=FIRST_AT, triage="wrong"
+    )
+    assert find_finding(session, "F-001").disposition == expected
+    assert recorded(run_dir, "F-001") == expected
+    report = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert "  - decision: deferred\n  - triage: wrong\n" in report
+
+    apply_disposition(run_dir, "F-001", "rejected", "FICT not a clash", OTHER_BY, at=LATER_AT)
+
+    assert recorded(run_dir, "F-001") == Disposition(
+        decision="rejected", note="FICT not a clash", by=OTHER_BY, at=LATER_AT, triage="wrong"
+    )
 
 
 @pytest.mark.parametrize(
@@ -353,7 +423,7 @@ def test_a_decided_finding_without_a_triage_takes_one_once(tmp_path: Path, decis
         ([("accepted", "wrong")], ("rejected", "wrong"), TERMINAL, False),
         ([("accepted", None)], ("rejected", None), TERMINAL, False),
         ([("accepted", None)], ("accepted", None), TERMINAL, False),
-        ([("deferred", None)], ("deferred", "wrong"), "is deferred", False),
+        ([("deferred", None)], ("deferred", None), "is deferred", False),
         ([("deferred", "wrong")], ("deferred", "already_known"), "is deferred", False),
     ],
     ids=[
@@ -366,7 +436,7 @@ def test_a_decided_finding_without_a_triage_takes_one_once(tmp_path: Path, decis
         "another-decision-on-a-triage",
         "another-decision",
         "the-same-decision-with-no-triage",
-        "a-defer-again-with-a-triage",
+        "a-defer-again-with-no-triage",
         "a-defer-again-holding-a-triage",
     ],
 )
@@ -388,7 +458,13 @@ def test_a_second_triage_or_another_decision_is_still_refused(
     `TriageAlreadyRecordedError`, still a `ValueError`, so the route can answer it with a sentence
     of its own; every other refusal is exactly `ValueError`, as before. Three cases added: another
     triage on a Reject that holds one, another decision on a finding that holds a triage, and a
-    Defer again that holds one."""
+    Defer again that holds one.
+
+    *Changed 2026-11-02 on purpose (002 T364; owner decision 198A):* a Defer again with a triage,
+    on a Defer recorded without one, is no longer refused - it is the Defer's late triage
+    (`test_a_deferred_finding_takes_a_late_triage_and_stays_deferred`) - so the case
+    `a-defer-again-with-a-triage` is now `a-defer-again-with-no-triage`: a Defer after a Defer
+    with no outcome is still refused, as is one with an outcome when the Defer holds one."""
     run_dir = run_folder(tmp_path)
     for decision, triage in first:
         apply_disposition(run_dir, "F-001", decision, "FICT note", BY, at=FIRST_AT, triage=triage)

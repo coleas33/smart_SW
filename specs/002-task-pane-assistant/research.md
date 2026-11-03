@@ -7148,3 +7148,115 @@ the decision register now records 160A as done.
   withdrawal of a finding the session still holds. And a folded family's member prints its
   cleared line inside the family's `<details>` block, as `_render_family` already did, now pinned
   by a case proved by a mutant.
+
+### H-c-009. The repair press keeps a typed note, and a Defer takes an outcome (2026-11-02; cycle 11)
+
+- **Question**: the late triage a card's no-triage line names - an Accept or Reject pressed again
+  with an outcome (185A) - recorded only the triage, so a note typed with it, such as 188A's date,
+  was dropped unannounced while the box still showed it; a deferred finding gained an outcome only
+  by deciding; and the note box was drawn empty and never filled again, so after a reload or a
+  review switch a Defer's later Accept or Reject sent an empty box over the Defer's note
+  ([roadmap hole H-c-009](../../docs/roadmap/holes.md)). Owner decision 198A revisits 185A's
+  "whatever note and engineer the second call carries" (185A, *Edge cases*, above).
+- **Settled**, with the defaults taken inside 198A:
+  - **The note.** A late triage keeps the note recorded; with none recorded - a blank note is
+    none - it keeps the one sent with it, and a blank one sent changes nothing. The engineer and
+    the time stay as first recorded.
+  - **A Defer's late triage.** Defer sent again with a triage, on a deferred finding with no
+    triage, is the same late triage: the triage recorded, the decision, engineer and time kept,
+    the note as above. A Defer again with no triage, or with one when it holds one, is refused as
+    before (`IllegalTransition`): a deferred finding's triage may still change with its later
+    Accept or Reject, so `TriageAlreadyRecorded`'s "recorded only once" is not true of it.
+  - **The words.** `labels.no_triage.deferred`: "No triage recorded yet: pick one, then press
+    Defer again".
+  - **The note box.** The card draws it with the recorded note and fills it again from the record
+    after each reply and each `disposition` event, so no reply leaves a note the backend did not
+    keep in it, and a later press sends the recorded note, or the engineer's edit of it, never an
+    empty box over it. A refused press leaves it as typed: the backend never read that note, so
+    the retry sends it, while the triage row shows the record again (H-g-012). *Changed
+    2026-11-02 by the Tier 2 review (Review, below):* this said the box is filled from the record
+    after a refusal's reply too, which erased a note the backend never read.
+  - **A note not kept** (the Tier 2 review's default, 198A's rule kept). When a decision's reply
+    holds another note than the non-blank one the press sent, the two compared trimmed - a late
+    triage keeps the note recorded first - the card says so after the reply's sentence, in the
+    words file's `labels.note.not_kept`, "The note recorded first stays.", until its status is next
+    written, as the record above a refusal lasts; with no labels, nothing. The page compares the
+    two notes and decides nothing: which note is kept stays the backend's rule. *Added 2026-11-02
+    by a read-only check of the review's fixes:* with no labels the card draws no line, not even
+    an empty one, and the line and the status line it ends are wholly visible at a docked pane's
+    300 px, in the card's grouped row, as every other line FR-031 puts on a card; a fact pins
+    each (T368).
+- **Tests**: T364 and T366 in [tasks.md](tasks.md), Phase 31, each written first; T365 and T367
+  make them green, and T368 closes the records.
+- **Built** (2026-11-02, T365 and T367): `dispositions._takes_a_late_triage` covers any decision
+  recorded without a triage, sent again with the same decision and a triage, and `_late_note`
+  keeps the note as *Settled* says; the live route and the console reach the rule through
+  `set_disposition` and `apply_disposition`, unchanged, and the console's help says so. The words
+  file's `labels.no_triage.deferred`, with the four pane fixtures that embed the block
+  regenerated, `review-send-failure-events.json`'s pin moved and `LabelsSample.cs` mirroring it.
+  The page: `render.showNote`, called when `decisions` draws the box, by `showDisposition` after
+  each reply and `disposition` event, and by `decide` after a refusal. Dated notes in
+  [contracts/chat-api.md](contracts/chat-api.md) (the disposition route) and 001
+  [contracts/cli.md](../001-agentic-design-review/contracts/cli.md) (`swreview disposition`), at
+  the close (T368). *Changed 2026-11-02 by the Tier 2 review:* `decide` no longer calls it after
+  a refusal, and its reply adds the `.card-note-kept` line (*Settled*, a note not kept), with the
+  words file's `note` group, `summary.Labels.note`, the four pane fixtures that embed the block
+  regenerated, the pin moved again, `LabelsSample.cs` mirroring the group, and dated notes in
+  [contracts/chat-api.md](contracts/chat-api.md) (`GET /labels`) and 009
+  [contracts/plain-words.md](../009-engineer-workspace/contracts/plain-words.md) section 1.
+- **Tests changed on purpose**, none loosened: `test_a_decided_finding_without_a_triage_takes_one_once`
+  (its docstring: the first note stays because one is recorded; its assertions as they were);
+  `test_a_second_triage_or_another_decision_is_still_refused`, whose case
+  `a-defer-again-with-a-triage`, now a Defer's late triage, is `a-defer-again-with-no-triage`,
+  still refused; `test_a_card_with_no_triage_names_the_repair` (a Defer's words);
+  `ADecidedFindingWithoutATriageTakesOneWithTheSameDecision` (the box after the late triage and
+  after the refusal); `APickedTriageTravelsWithTheDecisionAndIsShownOnTheCard` and
+  `ARefusedTriageShowsTheRecordedTriageAgain` (each posted body pinned an empty box over a
+  recorded note); `ANoTriageLineIsWhollyVisibleAtThreeHundredPixelsInItsRow` (an Accept's words,
+  now the longest); two facts' summaries naming a Defer's new words; and the 002 literal of the
+  specs-README pin (T363, T368).
+- **Tests first**: T364's 13 cases failed before T365, and T366's five facts before T367, each for
+  want of its change ([tasks.md](tasks.md), T364 and T366); a mutant of the refusal's note fill
+  failed one fact alone (T367). The close's whole C# suite then failed one fact, which reads every
+  dotted string literal of the page as a message type, on `showNote`'s selector `'input.note'`;
+  it finds the box by `'.note'` now, as `decide` does (T367's dated sub-item).
+- **Left open**: a Defer's later Accept or Reject still records the note it sends, so clearing the
+  box clears the note - since the box starts from the record, only on purpose; the console's
+  `--note` defaults to none, so a console Accept after a Defer with a note, sent without one,
+  still records none, as before; the seat plan's step 4.1 does not name the repair press; and the
+  hole's row in [`docs/roadmap/holes.md`](../../docs/roadmap/holes.md) is for the roadmap's next
+  update run. *Added 2026-11-02 by the Tier 2 review:* for the owner, the alternative to 198A's
+  first note - a late triage sent with a non-blank note other than the one recorded lets the
+  edit win, and the card's line goes - is not taken: the card says the first note stays
+  (*Settled*, a note not kept). And the `IllegalTransition` sentence does not name the missing
+  outcome when Defer is pressed again without one
+  ([`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 11).
+- **Gates** (T368; 2026-11-02), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required: 18,865 passed and 5 skipped on Python
+    3.12.3, and the same on 3.11.16 (`uv run --python 3.11 --isolated --all-extras`). Its two
+    warnings are neither of this cycle: the test client's deprecation, and a serializer warning
+    from `test_ir_loader_append.py`'s invalid row.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then 10,274
+    extractor and 4,336 add-in tests passed.
+  - The link check over the cycle's eight changed Markdown files, anchors included, none broken;
+    every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
+    ran.
+  - *Changed 2026-11-02:* that tree came before the Tier 2 review's fixes, whose gates are T368's
+    dated sub-items in [tasks.md](tasks.md).
+  - *Changed 2026-11-02:* the whole suites ran again on the final tree, after the review's fixes and
+    the read-only check's points: on `532a7131`, 18,866 passed and 5 skipped on Python 3.12.3 and
+    the same on 3.11; ruff clean; the identifier scan, 58 passed; C# with zero warnings, then 10,274
+    extractor and 4,342 add-in tests passed (T368's last sub-item).
+- **Review** (Tier 2, decision 180A; 2026-11-02): one review, one must-fix, each fix taken test
+  first, as T368's dated sub-items record. The must-fix: a refused press filled the note box from
+  the record, so a note the backend never read was erased - a press while a turn runs is refused
+  (`409 TurnRunning`), and the explanation pass, on by default, runs inside the turn's end, so
+  188A's date typed with an Accept pressed during it was gone, where `main` kept it; a refusal
+  now leaves the box as typed (*Settled*, the note box). A late triage that keeps the note
+  recorded first in place of an edit sent with it now says so on the card (*Settled*, a note not
+  kept). The 198A record's claim that no press sends an empty box over the note "from the
+  console" is dropped, as *Left open* says the console's `--note` defaults to none. And two
+  guards read the box after a `disposition` event and on a read-only restore, each proved by a
+  mutant.

@@ -29,6 +29,11 @@ namespace SwReview.AddIn.Tests;
 /// the group gains `read_only`, what such a card says while its review is read-only, whatever its decision. That one word
 /// is deliberately not the words file's own, which is `undecided`'s: a page that looked up the decision, or `undecided`, on
 /// a read-only review would print the same, so the sample's own words tell them apart.
+///
+/// *Changed 2026-11-02 (002 T365; owner decision 198A):* `deferred`'s words are the words file's new ones, naming Defer again.
+///
+/// *Changed 2026-11-02 (002 T368; cycle 11's Tier 2 review):* the `note` group, the words file's own: what a card says when a
+/// late triage keeps the note recorded first in place of another one the press sent.
 /// </summary>
 internal static class LabelsSample
 {
@@ -68,14 +73,23 @@ internal static class LabelsSample
     /// <summary>A Reject recorded without a triage, as <see cref="NoTriageAccepted"/>.</summary>
     public const string NoTriageRejected = "No triage recorded yet: pick one, then press Reject again";
 
-    /// <summary>A Defer recorded without a triage, which a Defer cannot follow: the triage comes with Accept or Reject.</summary>
-    public const string NoTriageDeferred = "No triage recorded yet: pick one, then press Accept or Reject";
+    /// <summary>
+    /// A Defer recorded without a triage: owner decision 198A's late triage is Defer again, which records the outcome and keeps
+    /// the deferral (it said to press Accept or Reject until 2026-11-02, 002 T365).
+    /// </summary>
+    public const string NoTriageDeferred = "No triage recorded yet: pick one, then press Defer again";
 
     /// <summary>
     /// Any flagged card of a read-only review with no triage, whatever its decision: no press, since the review takes none
     /// (cycle 9's Tier 2 review). Not the words file's own, which are <see cref="NoTriageUndecided"/>'s (see the summary).
     /// </summary>
     public const string NoTriageReadOnly = "No triage recorded yet (read-only review)";
+
+    /// <summary>
+    /// A decision's reply that keeps the note recorded first in place of another one the press sent: a late triage keeps it
+    /// (owner decision 198A; cycle 11's Tier 2 review).
+    /// </summary>
+    public const string NoteNotKept = "The note recorded first stays.";
 
     /// <summary>A second triage refused (roadmap hole H-g-012; owner decision 185A): the words file's sentence for it.</summary>
     public const string TriageAlreadyRecorded =
@@ -163,6 +177,13 @@ internal static class LabelsSample
                 { "rejected", NoTriageRejected },
                 { "deferred", NoTriageDeferred },
                 { "read_only", NoTriageReadOnly },
+            }
+        },
+        {
+            // Cycle 11's Tier 2 review (owner decision 198A): a note a late triage did not keep, in words.
+            "note", new Dictionary<string, string>
+            {
+                { "not_kept", NoteNotKept },
             }
         },
         {

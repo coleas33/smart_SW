@@ -323,7 +323,10 @@ def test_every_label_is_a_plain_word_not_a_token() -> None:
     *Changed 2026-11-01 on purpose (002 T332; owner decision 187A):* and a pass's miss word.
 
     *Changed 2026-11-02 on purpose (002 T352; roadmap hole H-c-008):* and the sentences a flagged
-    finding's card head says until its triage is recorded."""
+    finding's card head says until its triage is recorded.
+
+    *Changed 2026-11-02 on purpose (002 T368; cycle 11's Tier 2 review):* and the sentence a card
+    says when a late triage keeps the note recorded first."""
     labels = load_words().labels
     for group in (
         labels.status,
@@ -333,6 +336,7 @@ def test_every_label_is_a_plain_word_not_a_token() -> None:
         labels.triage,
         labels.pass_triage,
         labels.no_triage,
+        labels.note,
     ):
         assert all("_" not in word for word in group.values())
 
@@ -390,7 +394,7 @@ NO_TRIAGE = {
     "undecided": "No triage recorded yet",
     "accepted": "No triage recorded yet: pick one, then press Accept again",
     "rejected": "No triage recorded yet: pick one, then press Reject again",
-    "deferred": "No triage recorded yet: pick one, then press Accept or Reject",
+    "deferred": "No triage recorded yet: pick one, then press Defer again",
     "read_only": "No triage recorded yet",
 }
 """Roadmap hole H-c-008 (002 FR-031): what a flagged finding's card head says until its triage is
@@ -403,7 +407,12 @@ Defer (`dispositions._ALLOWED_FROM_DEFERRED`).
 it):* shorter, so a finding not yet decided reads one short line under its title at a docked
 pane's 300 px and names only the outcome row it already shows ("pick one"); and `read_only`, what
 such a card says while its review is read-only, whatever its decision, naming no press - a
-read-only review's buttons are off."""
+read-only review's buttons are off.
+
+*Changed 2026-11-02 on purpose (002 T364; owner decision 198A):* a Defer recorded without one
+says to press Defer again, which records the outcome and keeps the deferral, where it said to
+press Accept or Reject because a Defer could not follow a Defer. Every decision's words now name
+the same decision again."""
 
 
 def test_a_card_with_no_triage_names_the_repair() -> None:
@@ -422,6 +431,20 @@ def test_a_card_with_no_triage_names_the_repair() -> None:
     assert set(NO_TRIAGE) - {"undecided", "read_only"} == DECISIONS
     assert "press" not in labels.no_triage["read_only"].lower()
     assert order.index("no_triage") == order.index("pass_triage") + 1
+
+
+def test_a_note_a_late_triage_did_not_keep_is_said_once() -> None:
+    """Cycle 11's Tier 2 review (owner decision 198A, 002 FR-031): a late triage keeps the note
+    recorded first, so a different note sent with it is not kept, and the card says so in one
+    short line under the reply's sentence. The page compares the note it sent, when not blank,
+    with the reply's, and looks the line up by `not_kept`; with no labels it says nothing (009
+    FR-030). A group of its own after `no_triage`, so `source` stays just before `errors`
+    (`test_sources_labels.py`)."""
+    labels = load_words().labels
+    order = list(raw_words()["labels"])
+
+    assert labels.note == {"not_kept": "The note recorded first stays."}
+    assert order.index("note") == order.index("no_triage") + 1
 
 
 def test_a_triage_a_finding_does_not_take_says_what_a_pass_takes() -> None:

@@ -1367,6 +1367,13 @@ body.view-transcript #results {
   color: var(--judge);
 }
 
+/* A note a late triage did not keep is said after the reply's sentence, in the remark's muted ink,
+   until the card's status is next written (198A; cycle 11's Tier 2 review). */
+.card-status .card-note-kept {
+  display: block;
+  color: var(--muted);
+}
+
 #review-preparation {
   flex: 0 1 auto;
   max-height: 18rem;

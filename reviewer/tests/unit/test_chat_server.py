@@ -453,7 +453,10 @@ def test_labels_answer_the_words_files_card_vocabulary(client: TestClient) -> No
     `no_triage` group, what a flagged finding's card head says until its triage is recorded.
 
     *Changed 2026-11-02 on purpose (002 T356; cycle 9's Tier 2 review):* and that group's keys,
-    with `read_only`, the words such a card says while its review is read-only."""
+    with `read_only`, the words such a card says while its review is read-only.
+
+    *Changed 2026-11-02 on purpose (002 T368; cycle 11's Tier 2 review):* and the `note` group,
+    what a card says when a late triage keeps the note recorded first in place of the one sent."""
     from swreview.report.summary import load_words
 
     response = client.get("/labels")
@@ -473,9 +476,11 @@ def test_labels_answer_the_words_files_card_vocabulary(client: TestClient) -> No
         "triage",
         "pass_triage",
         "no_triage",
+        "note",
         "errors",
     }
     assert set(body["no_triage"]) == {"undecided", "accepted", "rejected", "deferred", "read_only"}
+    assert set(body["note"]) == {"not_kept"}
     assert body["source"] == {"code": "Checked by code", "model": "AI guidance"}, "feature 013"
     assert body["status"]["checked_within_scope"] == "checked within scope"
     assert body["errors"]["TurnRunning"].startswith("A review turn is still running.")
@@ -2977,6 +2982,46 @@ def test_a_late_triage_records_the_triage_and_nothing_else(
         (409, "TriageAlreadyRecorded"),
     ]
     assert folder_files(run_dir) == before
+
+
+def test_a_deferred_finding_takes_a_late_triage_and_a_note_on_the_live_route(
+    client: TestClient, run_dir: Path, chat_with_a_finding: str
+) -> None:
+    """Owner decision 198A (002 T364), through the route the pane presses: a Defer recorded with
+    no triage and no note, sent again with an outcome and a note - such as 188A's date - records
+    both and stays deferred, its `by` and `at` as first recorded, and the reply, `session.json`,
+    `report.md` and the `disposition` event all say so. A Defer again with no triage is still
+    `409 IllegalTransition`, and writes nothing."""
+    url = disposition_url(chat_with_a_finding, run_dir)
+    first = client.post(url, json={"decision": "deferred", "note": "", "by": "FICT-ENG"}).json()[
+        "disposition"
+    ]
+    before = folder_files(run_dir)
+
+    again = client.post(url, json={"decision": "deferred", "note": "", "by": "FICT-ENG"})
+
+    assert (again.status_code, again.json()["error_class"]) == (409, "IllegalTransition")
+    assert folder_files(run_dir) == before
+
+    late = client.post(
+        url,
+        json={
+            "decision": "deferred",
+            "note": "FICT first shown at an earlier sitting",
+            "by": "FICT-ENG-2",
+            "triage": "new_and_real",
+        },
+    )
+
+    assert late.status_code == 200, late.text
+    recorded = {**first, "note": "FICT first shown at an earlier sitting", "triage": "new_and_real"}
+    assert late.json()["disposition"] == recorded
+    saved = load_session(run_dir / "session.json").findings[0].disposition
+    assert saved is not None and saved.model_dump(mode="json") == recorded
+    report = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert "  - decision: deferred\n  - triage: new and real\n" in report
+    assert "  - note: FICT first shown at an earlier sitting\n" in report
+    assert recorded_dispositions(run_dir) == [first, recorded]
 
 
 def test_a_second_triage_is_a_409_of_its_own_and_writes_nothing(

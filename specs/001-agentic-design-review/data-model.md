@@ -307,6 +307,13 @@ terminal with one exception: one recorded without a triage takes one once, sent 
 same decision, and the decision, note, `by` and `at` stay as first recorded. A different
 decision, a second triage, or the same decision with none is refused, as before.
 
+*Amended 2026-11-02 (owner decision 198A; feature 002 FR-031):* a late triage keeps a note sent
+with it when none is recorded (a blank note is none), and the first note when one is. A deferred
+finding with no triage takes one the same way: deferred sent again with a triage records it and
+stays deferred, its `by` and `at` as first recorded and its note as a late triage keeps it. A
+deferred finding sent deferred again with no triage, or with one when it holds one, is refused,
+as before.
+
 **Exception.status**: `active` → `needs_review` when a later package's fingerprint or
 configuration differs; `needs_review` → `active` (engineer re-accepts) or `retired`.
 

@@ -413,6 +413,7 @@
     note.setAttribute('type', 'text');
     note.setAttribute('placeholder', 'Note (optional)');
     tools.appendChild(note);
+    showNote(tools, body.disposition);
 
     var group = el('span', 'seg');
     group.appendChild(button('Accept', 'accept', 'action accept'));
@@ -485,6 +486,20 @@
       head.removeChild(shown);
     }
     append(head, [noTriageLine(body, labels, readOnly)]);
+  }
+
+  /**
+   * Fills the note box under `root` with `disposition`'s note, the one recorded, or empties it with none
+   * (owner decision 198A; roadmap hole H-c-009). Drawn with the card and again from each reply and `disposition`
+   * event (`app.js`), so no reply leaves a note the backend did not keep in the box, and the next press sends the
+   * recorded note, or the engineer's edit of it, never an empty box over it. A refused press leaves the box as
+   * typed, since the backend never read it (cycle 11's Tier 2 review).
+   */
+  function showNote(root, disposition) {
+    var box = root.querySelector('.note');
+    if (box) {
+      box.value = disposition && disposition.note ? String(disposition.note) : '';
+    }
   }
 
   /** Presses the triage button whose token is `token` and lets the others go; none for none. */
@@ -1375,6 +1390,7 @@
     dispositionText: dispositionText,
     dispositionClass: dispositionClass,
     pressTriage: pressTriage,
+    showNote: showNote,
     showNoTriage: showNoTriage,
     evidenceCard: evidenceCard,
     questionsPanel: questionsPanel,

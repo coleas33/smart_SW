@@ -1089,7 +1089,8 @@
    * Both writers go through here - the `disposition` event from the stream and the reply to the
    * engineer's own press - so a decided finding looks the same whichever recorded it, and the
    * "decided" class agrees with the one `render.findingCard` puts on a card it builds fresh. The
-   * triage row shows the recorded triage pressed, in place of any pick (owner decision 185A).
+   * triage row shows the recorded triage pressed, in place of any pick (owner decision 185A), and
+   * the note box the recorded note, in place of what was typed (owner decision 198A).
    *
    * It also keeps what is recorded in the finding's body, the page's one memory of it, which
    * `placeFinding` holds from the finding as sent and `decide` shows again after a refusal
@@ -1112,6 +1113,7 @@
     status.className = render.dispositionClass(text);
     status.textContent = text;
     render.pressTriage(card, disposition ? disposition.triage : null);
+    render.showNote(card, disposition);
     // The head says it has no triage until the record holds one (roadmap hole H-c-008); a card the
     // review no longer holds has no record here to read.
     if (entry) {
@@ -2685,7 +2687,18 @@
       'POST',
       body
     ).then(function (finding) {
-      showDisposition(card, finding && finding.disposition);
+      var disposition = finding && finding.disposition;
+      showDisposition(card, disposition);
+      // A late triage keeps the note recorded first (owner decision 198A), so a reply holding another
+      // note than the non-blank one sent says so after its sentence until the status is next written,
+      // as the record above a refusal lasts (cycle 11's Tier 2 review). Which note is kept is the
+      // backend's rule: the page compares the two, trimmed, and decides nothing.
+      var sent = body.note.trim();
+      var line = attention.labelOf(state.labels, 'note', 'not_kept', '');
+      var status = card.querySelector('.card-status');
+      if (disposition && sent && sent !== String(disposition.note || '').trim() && line && status) {
+        status.appendChild(render.el('span', 'card-note-kept', line));
+      }
       // The review's tally as this decision left it (002 cycle 7), only while the card pressed is the
       // one the review on screen holds: a reply that lands after a switch is another review's.
       if (entryOf(card)) {
@@ -2694,7 +2707,8 @@
     }).catch(function (error) {
       // Refused, so the record is as it was (roadmap hole H-g-012): the card shows it again - its
       // triage pressed, or none, in place of the pick, and its sentence above the refusal. Which
-      // press is refused is the backend's rule; the page compares nothing.
+      // press is refused is the backend's rule; the page compares nothing. The note box keeps what
+      // was typed: the backend never read it, so the retry sends it (cycle 11's Tier 2 review).
       var entry = entryOf(card);
       var recorded = entry ? entry.body.disposition : null;
       render.pressTriage(card, recorded ? recorded.triage : null);
