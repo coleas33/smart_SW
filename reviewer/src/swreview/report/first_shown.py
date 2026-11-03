@@ -126,9 +126,9 @@ def _names(record: ReviewSession, package: EvidencePackage, document: Mapping[st
 
 
 def _records(folder: Path, *, own: bool) -> list[ReviewSession]:
-    """The records of `folder` that can be read: its `session.json`, but in the review's own
-    folder, and those a Retry or a re-run moved aside beside it (`MOVED_ASIDE`). One that cannot be
-    read, is cut off or is no review is skipped, so the review is never failed over it."""
+    """The records of `folder` that can be read: its `session.json`, unless it is the review's own
+    folder (`own`), and those a Retry or a re-run moved aside beside it (`MOVED_ASIDE`). One that
+    cannot be read, is cut off or is no review is skipped, so the review is never failed over it."""
     try:
         paths = sorted(path for path in folder.iterdir() if MOVED_ASIDE.fullmatch(path.name))
     except OSError:
