@@ -7426,3 +7426,38 @@ the decision register now records 160A as done.
     a blank note sent with it always has (198A). The live route records the note its body sends,
     as before, and the console's printed line still names no note: its `--json` payload
     carries it.
+- **Built** (2026-11-03, T377 to T379): `dispositions._validate_transition` raises
+  `OutcomeNeededError` when the decision sent is the one recorded and neither the press nor the
+  record holds a triage, and the deferred refusal's message names the triage the Defer then
+  holds; `chat/server.py`'s `OutcomeNeeded` answers it; `cli.py`'s `--note` is none when left
+  out, and the note recorded is sent in its place. The words file's
+  `labels.errors.OutcomeNeeded`, with the four pane fixtures that embed the block regenerated,
+  `review-send-failure-events.json`'s pin moved and `LabelsSample.cs` mirroring it; dated notes
+  in [contracts/chat-api.md](contracts/chat-api.md) (the disposition route and `GET /labels`),
+  001 [contracts/cli.md](../001-agentic-design-review/contracts/cli.md) and 009
+  [contracts/plain-words.md](../009-engineer-workspace/contracts/plain-words.md) section 1. The
+  page changed nothing: it already prints a refusal's sentence by its class and leaves the box
+  as typed, which T378's fact pins, proved by two mutants. Tests changed on purpose, none
+  loosened: `test_a_second_triage_or_another_decision_is_still_refused`, whose two cases of a
+  decision recorded without a triage sent again with none moved to the record's new test, which
+  asserts their own class; `test_a_deferred_finding_takes_a_late_triage_and_a_note_on_the_live_route`
+  (that Defer again, now `409 OutcomeNeeded`); and the 002 literal of the specs-README pin (T375,
+  T380).
+- **Left open**: `IllegalTransition`'s sentence still says to reload the review, which draws the
+  note box from the record, for every refusal it answers - a different decision on a settled
+  finding, or Defer again on a Defer that holds a triage; the live route still records the note
+  its body sends, so a client other than the page that sends none after a Defer records none;
+  and the hole's row in [`docs/roadmap/holes.md`](../../docs/roadmap/holes.md) is for the
+  roadmap's next update run.
+- **Gates** (T380; 2026-11-03), on the cycle's final tree:
+  - The whole non-live suite, the tokenizer required: 18,921 passed and 5 skipped on Python
+    3.12.3, and the same on 3.11.16 (`uv run --python 3.11 --isolated --all-extras`). Its two
+    warnings are neither of this cycle: the test client's deprecation, and a serializer warning
+    from `test_ir_loader_append.py`'s invalid row.
+  - `ruff check src tests` clean; the identifier scan
+    (`test_tracked_files_carry_no_recorded_number.py`), 58 passed.
+  - C#: the Release build of the solution with zero warnings (`--no-incremental`), then 10,274
+    extractor and 4,349 add-in tests passed.
+  - The link check over the cycle's eight changed Markdown files, anchors included, none broken;
+    every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
+    ran.
