@@ -7545,7 +7545,9 @@ restart, or in a Check again's `report.md`, whose carried withdrawals name an ea
     `finding` event it announces next. The display title is the one every `finding` event names
     (`report/titles.display_title`): whole, its parts named. The events contract takes the key,
     optional, on `finding.withdrawn` and on `session.started`'s `carried_withdrawals` items, so an
-    older stream stays valid; a re-run carries it with the body it carries.
+    older stream stays valid; a re-run carries it with the body it carries. *Changed 2026-11-03
+    (T386):* followed by the finding's parts' names when it names none of them (*Tier 2 review*,
+    below).
   - **The line.** "F-007 (<title>) withdrawn: <reason>; <taken>": the title in parentheses right
     after the id, in `report.md`'s withdrawn lines (a carried one's before its mark), a read-only
     restore's lines and the live Transcript's line, which a replay shares
@@ -7587,6 +7589,21 @@ restart, or in a Check again's `report.md`, whose carried withdrawals name an ea
     their next regeneration does not move for this cycle.
   - A Check again's carried withdrawals are still in its `report.md` alone, not in its live
     Transcript or a read-only restore of it (the backlog's cycle 12 section).
+- **Tier 2 review** (T386; 2026-11-03): no must-fix, two should-fix, both fixed test first
+  ([tasks.md](tasks.md), T386's sub-item):
+  - A withdrawal's title often named no part: a check's title can name none, "the equation
+    manager holds no equations", so the bought pin's withdrawn findings read as the plate's that
+    stay. The review's option (a): `report/titles.withdrawal_title`, which every withdrawal the
+    backend writes names, an answer's and a fold's, follows the display title with the finding's
+    parts' names, after "; ", when it names none of them. The defaults taken: each part named as
+    the display title names it, by its name from the same map or its id where the name is blank
+    or unknown, once, and alone after a blank title; a title names a part when it holds its name,
+    its id or its document's file name (`report/names.component_files`), whole, so the hygiene,
+    mass and thread titles that name the part's file gain nothing; every part is named, as
+    `report.md`'s Components line names every one, however many instances; "; " is the line's
+    punctuation, so no words key moved.
+  - No fact drove a titled withdrawal through the replay a review switch or a reload runs:
+    `AReplayedWithdrawalSaysWhatItTook` now replays a titled body and an older one.
 - **Gates** (T386; 2026-11-03), on the cycle's final tree:
   - The whole non-live suite, the tokenizer required: 18,918 passed and 5 skipped on
     Python 3.12.3, and the same on 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), four
@@ -7599,3 +7616,5 @@ restart, or in a Check again's `report.md`, whose carried withdrawals name an ea
   - The link check over the cycle's eight changed Markdown files, anchors included, none broken;
     every changed file LF in the index. No SOLIDWORKS process, seat task, or paid or live test
     ran.
+  - *Changed 2026-11-03:* that tree came before the Tier 2 review's fixes; their gates are T386's
+    sub-item in [tasks.md](tasks.md), and the whole suites run on the final tree next.
