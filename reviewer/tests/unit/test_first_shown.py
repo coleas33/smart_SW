@@ -36,8 +36,9 @@ from swreview.agent.events import EventSink
 from swreview.agent.providers import AgentEvent
 from swreview.agent.providers.fake import FakeProvider
 from swreview.benchmark.origins import finding_origin
-from swreview.findings import Finding, SubjectKey, finding_subject_key
+from swreview.findings import MODEL_FINDING_CHECK, Finding, SubjectKey, finding_subject_key
 from swreview.ir.loader import load_package
+from swreview.ir.models import SourceRef
 from swreview.report import first_shown
 from swreview.report.first_shown import document_name, first_shown_dates
 from swreview.report.markdown import render_report
@@ -438,6 +439,58 @@ def test_an_earlier_finding_on_another_part_under_the_same_number_gives_no_date(
     assert dates(tmp_path) == {key(ON_ONE): "2026-09-18"}
 
 
+@pytest.mark.parametrize(
+    "finding",
+    [
+        make_finding(
+            check=MODEL_FINDING_CHECK,
+            component_ids=[],
+            drawing_locations=[SourceRef(document_id="doc:1", sheet="Sheet1", view="FICT View1")],
+            numeric=False,
+            source="model",
+        ),
+        make_finding(check="FICT.check.document", component_ids=[], document_ids=["doc:2"]),
+    ],
+    ids=["a drawing's", "a document-scoped one"],
+)
+def test_an_earlier_finding_naming_no_component_keeps_its_date(
+    tmp_path: Path, finding: Finding
+) -> None:
+    """The read-only check's should-fix 2 (T392): the part guard asks only of the components a
+    finding names, so one naming none - a drawing's, which `record_drawing_finding` places by its
+    sheet and view alone, or a document-scoped one - keeps its date."""
+    earlier(tmp_path, f"20260916-090000-{LABEL}", finding)
+
+    assert dates(tmp_path) == {key(finding): "2026-09-16"}
+
+
+def test_an_earlier_finding_on_two_parts_gives_none_once_the_second_is_another_parts(
+    tmp_path: Path,
+) -> None:
+    """The read-only check's should-fix 2 (T392): each component a finding names must still be an
+    instance of a document it drew on, not just one of them. A finding on both housings keeps
+    its date while the tree is as it was, and gives none once an edit has given the second
+    housing's number to a bracket."""
+    both = make_finding(component_ids=["cmp:0001", "cmp:0002"])
+    earlier(tmp_path, f"20260916-090000-{LABEL}", both)
+    assembly, housing = PACKAGE.documents
+    bracket = housing.model_copy(
+        update={"document_id": "doc:FICT-bracket", "file_name": "FICT-bracket.SLDPRT",
+                "path": "native/FICT-bracket.SLDPRT"}
+    )
+    first, second = PACKAGE.components
+    edited = PACKAGE.model_copy(
+        update={
+            "documents": [assembly, housing, bracket],
+            "components": [first, second.model_copy(update={"document_id": bracket.document_id})],
+        }
+    )
+
+    assert dates(tmp_path) == {key(both): "2026-09-16"}
+    own = tmp_path / f"20261103-090000-{LABEL}"
+    assert first_shown_dates(tmp_path, own, edited, before=BEFORE) == {}
+
+
 def test_the_match_reads_the_oldest_reviews_first_and_stops_at_its_budget(
     tmp_path: Path, reads: list[Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -455,6 +508,35 @@ def test_the_match_reads_the_oldest_reviews_first_and_stops_at_its_budget(
     assert dates(tmp_path) == {key(ON_ONE): "2026-09-16", key(ON_TWO): "2026-09-17"}
     assert reads == [oldest / SESSION_FILE_NAME, middle / SESSION_FILE_NAME]
     assert newest / SESSION_FILE_NAME not in reads
+
+
+def test_a_check_agains_own_folder_counts_however_long_the_older_reviews_took(
+    tmp_path: Path, reads: list[Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The read-only check's should-fix 1 (T392): the budget bounds the other reviews, not the
+    review's own folder, the document's newest and so the first it would cut. A Check again's
+    earlier record is already held, and the records its folder moved aside are this review's
+    own few, so what they showed keeps its day however long the older reviews took: here a
+    finding the waiting record showed on 09-20 and its re-run again on 09-25, and one only the
+    re-run showed. Each other folder costs a second of a two-second budget."""
+    clock = itertools.count(0.0, 1.0)
+    monkeypatch.setattr(first_shown, "monotonic", lambda: next(clock), raising=False)
+    monkeypatch.setattr(first_shown, "READ_BUDGET_S", 2.0, raising=False)
+    oldest = earlier(tmp_path, f"20260916-090000-{LABEL}", ON_ONE)
+    middle = earlier(tmp_path, f"20260917-090000-{LABEL}", ON_ONE)
+    earlier(tmp_path, f"20260918-090000-{LABEL}", make_finding(check="FICT.check.cut"))
+    own = earlier(tmp_path, f"20260920-090000-{LABEL}", ON_TWO)
+    (own / SESSION_FILE_NAME).replace(own / "session.1.json")
+    rerun_only = make_finding(check="FICT.check.rerun")
+    held = record(ON_TWO, rerun_only, started=datetime(2026, 9, 25, 9, 0))
+    save_session(held, own / SESSION_FILE_NAME)
+
+    assert first_shown_dates(tmp_path, own, PACKAGE, before=BEFORE, earlier=held) == {
+        key(ON_ONE): "2026-09-16",
+        key(ON_TWO): "2026-09-20",
+        key(rerun_only): "2026-09-25",
+    }
+    assert reads == [oldest / SESSION_FILE_NAME, middle / SESSION_FILE_NAME, own / "session.1.json"]
 
 
 def test_a_pass_neither_gets_nor_gives_a_date(tmp_path: Path) -> None:
