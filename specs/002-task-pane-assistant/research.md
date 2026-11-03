@@ -7148,3 +7148,31 @@ the decision register now records 160A as done.
   withdrawal of a finding the session still holds. And a folded family's member prints its
   cleared line inside the family's `<details>` block, as `_render_family` already did, now pinned
   by a case proved by a mutant.
+
+### H-c-009. The repair press keeps a typed note, and a Defer takes an outcome (2026-11-02; cycle 11)
+
+- **Question**: the late triage a card's no-triage line names - an Accept or Reject pressed again
+  with an outcome (185A) - recorded only the triage, so a note typed with it, such as 188A's date,
+  was dropped unannounced while the box still showed it; a deferred finding gained an outcome only
+  by deciding; and the note box was drawn empty and never filled again, so after a reload or a
+  review switch a Defer's later Accept or Reject sent an empty box over the Defer's note
+  ([roadmap hole H-c-009](../../docs/roadmap/holes.md)). Owner decision 198A revisits 185A's
+  "whatever note and engineer the second call carries" (185A, *Edge cases*, above).
+- **Settled**, with the defaults taken inside 198A:
+  - **The note.** A late triage keeps the note recorded; with none recorded - a blank note is
+    none - it keeps the one sent with it, and a blank one sent changes nothing. The engineer and
+    the time stay as first recorded.
+  - **A Defer's late triage.** Defer sent again with a triage, on a deferred finding with no
+    triage, is the same late triage: the triage recorded, the decision, engineer and time kept,
+    the note as above. A Defer again with no triage, or with one when it holds one, is refused as
+    before (`IllegalTransition`): a deferred finding's triage may still change with its later
+    Accept or Reject, so `TriageAlreadyRecorded`'s "recorded only once" is not true of it.
+  - **The words.** `labels.no_triage.deferred`: "No triage recorded yet: pick one, then press
+    Defer again".
+  - **The note box.** The card draws it with the recorded note and fills it again from the record
+    after each reply - a refusal's too, as the triage row shows the record again (H-g-012) - and
+    each `disposition` event, so it never shows a note the backend did not keep, and a later press
+    sends the recorded note, or the engineer's edit of it, never an empty box over it. A Defer's
+    later Accept or Reject still records the note it sends, as before.
+- **Tests**: T364 and T366 in [tasks.md](tasks.md), Phase 31, each written first; T365 and T367
+  make them green, and T368 closes the records.
