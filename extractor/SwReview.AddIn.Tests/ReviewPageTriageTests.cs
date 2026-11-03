@@ -68,6 +68,11 @@ namespace SwReview.AddIn.Tests;
 /// decision, the `finding.withdrawn` body names the disposition and the backend's clause for it (`taken`), and the Transcript's
 /// line ends with that clause after the reason, printed as sent, live and in a replay; a fold's withdrawal carries none, the
 /// cleared line on the card saying what the fold took.
+///
+/// Owner decision 198A (002 T366; roadmap hole H-c-009): a Defer recorded without a triage takes one when Defer is pressed again
+/// with one picked, and its card says so in the backend's words; and a card's note box shows the recorded note when the card is
+/// drawn and after each reply, a refusal's too, so it never shows a note the backend did not keep and a later press posts the
+/// recorded note - after a reload or a review switch too - rather than an empty box over it.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -139,6 +144,10 @@ public sealed class ReviewPageTriageTests
     /// reply is shown; a deferred finding whose recorded triage is let go posts no `triage` key, and
     /// the reply - the backend keeps a Defer's triage when the later decision names none - is what the
     /// row shows pressed again.
+    ///
+    /// *Changed 2026-11-02 on purpose (002 T366; owner decision 198A, roadmap hole H-c-009):* the deferred
+    /// finding's Accept posts the Defer's note, `FICT check the bore`, which its note box now shows, where
+    /// the body pinned an empty note - the empty box that would have replaced the Defer's note, unannounced.
     /// </summary>
     [Fact]
     public void APickedTriageTravelsWithTheDecisionAndIsShownOnTheCard()
@@ -176,7 +185,7 @@ public sealed class ReviewPageTriageTests
             Assert.Empty(Pressed(await driver.Read(ReadCard("F-002"))));
             await driver.ClearCalls();
             await Decide(driver, "F-002", "accept");
-            Assert.Equal("decision=accepted, note=", Body(Assert.Single(await DispositionCalls(driver))));
+            Assert.Equal("decision=accepted, note=FICT check the bore", Body(Assert.Single(await DispositionCalls(driver))));
             JsonElement accepted = await driver.Read(ReadCard("F-002"));
             Assert.Equal(new[] { "not_worth_flagging" }, Pressed(accepted));
             Assert.Equal(
@@ -304,6 +313,13 @@ public sealed class ReviewPageTriageTests
     /// pressed again, where nothing checked which button was pressed, and the recorded disposition's
     /// sentence shown above the refusal, where the refusal replaced it and the fact asserted no
     /// "Disposition:" on the card.
+    ///
+    /// *Changed 2026-11-02 on purpose (002 T366; owner decision 198A, roadmap hole H-c-009):* the
+    /// note box shows the recorded note after each reply. After the late triage, whose reply keeps
+    /// the first note, the box shows `FICT first note`, where it went on showing `FICT second note`,
+    /// which the backend did not keep; the refused press posts what the box then holds, `FICT third
+    /// note` typed over it, where it posted `FICT second note` still in the box; and after the
+    /// refusal the box shows the recorded note again, as the row shows the recorded triage.
     /// </summary>
     [Fact]
     public void ADecidedFindingWithoutATriageTakesOneWithTheSameDecision()
@@ -338,13 +354,15 @@ public sealed class ReviewPageTriageTests
                 "Disposition: accepted (" + Word("already_known") + ") by " + Engineer + " at " + RecordedAt + " - FICT first note",
                 late.GetProperty("status").GetString());
             Assert.Equal("card-status decided", late.GetProperty("statusClass").GetString());
+            Assert.Equal("FICT first note", await NoteBox(driver, "F-001"));
 
             await driver.Route("POST", DispositionPath("F-001"), 409, TriageAlreadyRecorded);
+            await Note(driver, "F-001", "FICT third note");
             await driver.ClearCalls();
             await Press(driver, "F-001", "wrong");
             await Decide(driver, "F-001", "accept");
             Assert.Equal(
-                "decision=accepted, note=FICT second note, triage=wrong",
+                "decision=accepted, note=FICT third note, triage=wrong",
                 Body(Assert.Single(await DispositionCalls(driver))));
             JsonElement refused = await driver.Read(ReadCard("F-001"));
             Assert.Equal("card-status bad", refused.GetProperty("statusClass").GetString());
@@ -352,6 +370,40 @@ public sealed class ReviewPageTriageTests
             Assert.Equal(new[] { "already_known" }, Pressed(refused));
             Assert.Equal(Sentence("accepted", "already_known", "FICT first note"), refused.GetProperty("record").GetString());
             Assert.Equal(LabelsSample.TriageAlreadyRecorded, refused.GetProperty("refusal").GetString());
+            Assert.Equal("FICT first note", await NoteBox(driver, "F-001"));
+        });
+    }
+
+    /// <summary>
+    /// Owner decision 198A (002 T366; roadmap hole H-c-009): a finding deferred without a triage takes one when Defer is pressed
+    /// again with one picked, and stays deferred. F-001 arrives deferred with a note and no triage: its head says to press Defer
+    /// again, in the backend's words, and its note box shows the Defer's note. `new and real` picked and Defer pressed posts the
+    /// deferral with the triage and that note; the reply - deferred, the triage recorded, the note, engineer and time kept - takes
+    /// the line away, presses `new and real`, is the card's sentence and is the box's note. Which press the backend records is
+    /// its rule alone: the page sends the press and shows the reply.
+    /// </summary>
+    [Fact]
+    public void ADeferredFindingTakesAnOutcomeWhenDeferIsPressedAgain()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            const string Kept = "FICT first shown at an earlier sitting";
+            await Reviewed(driver, Finding("F-001", Disposition("deferred", Kept, null)));
+            Assert.Equal(LabelsSample.NoTriageDeferred, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("text").GetString());
+            Assert.Equal(Kept, await NoteBox(driver, "F-001"));
+
+            await driver.Route("POST", DispositionPath("F-001"), 200, Finding("F-001", Disposition("deferred", Kept, "new_and_real")));
+            await driver.ClearCalls();
+            await Press(driver, "F-001", "new_and_real");
+            await Decide(driver, "F-001", "defer");
+
+            Assert.Equal("decision=deferred, note=" + Kept + ", triage=new_and_real", Body(Assert.Single(await DispositionCalls(driver))));
+            JsonElement card = await driver.Read(ReadCard("F-001"));
+            Assert.Equal(new[] { "new_and_real" }, Pressed(card));
+            Assert.Equal(Sentence("deferred", "new_and_real", Kept), card.GetProperty("status").GetString());
+            Assert.Equal("card-status decided", card.GetProperty("statusClass").GetString());
+            Assert.Equal(0, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("count").GetInt32());
+            Assert.Equal(Kept, await NoteBox(driver, "F-001"));
         });
     }
 
@@ -360,6 +412,10 @@ public sealed class ReviewPageTriageTests
     /// Accept pressed, and the backend refuses the second triage (a scripted `409 TriageAlreadyRecorded`). The card
     /// shows the record again: `already known` pressed and `wrong` let go, the recorded disposition's sentence above
     /// the refusal's, which is the words' sentence for the class, and the class in the refusal's fold.
+    ///
+    /// *Changed 2026-11-02 on purpose (002 T366; owner decision 198A, roadmap hole H-c-009):* the press posts the recorded
+    /// note, `FICT first note`, which the card's note box now shows when the card is drawn, where the body pinned the empty
+    /// box the card was drawn with.
     /// </summary>
     [Fact]
     public void ARefusedTriageShowsTheRecordedTriageAgain()
@@ -374,7 +430,7 @@ public sealed class ReviewPageTriageTests
 
             await Decide(driver, "F-001", "accept");
 
-            Assert.Equal("decision=accepted, note=, triage=wrong", Body(Assert.Single(await DispositionCalls(driver))));
+            Assert.Equal("decision=accepted, note=FICT first note, triage=wrong", Body(Assert.Single(await DispositionCalls(driver))));
             JsonElement refused = await driver.Read(ReadCard("F-001"));
             Assert.Equal(new[] { "already_known" }, Pressed(refused));
             Assert.Equal(Sentence("accepted", "already_known", "FICT first note"), refused.GetProperty("record").GetString());
@@ -1341,6 +1397,9 @@ public sealed class ReviewPageTriageTests
     /// F-001's Accept says to press Accept again, F-002's Reject to press Reject again, and F-003's Defer, which a Defer cannot
     /// follow, to press Accept or Reject. A press refused while a turn runs leaves F-001's line as recorded, and the late triage
     /// takes it away.
+    /// *Changed 2026-11-02 (002 T366; owner decision 198A):* F-003's Defer says to press Defer again, which records the outcome
+    /// and keeps the deferral (<see cref="ADeferredFindingTakesAnOutcomeWhenDeferIsPressedAgain"/>), so every decision's words
+    /// name the same decision again; the fact reads them from <see cref="LabelsSample"/>, and its code is as it was.
     /// </summary>
     [Fact]
     public void ACardDecidedWithoutATriageSaysToPressTheSameDecisionAgain()
@@ -1483,6 +1542,8 @@ public sealed class ReviewPageTriageTests
     /// longest of the words - is whole: inside the window and every box that clips it, its words inside it, with no sideways
     /// page scroll. *Changed 2026-11-02 on purpose (002 T356; cycle 9's Tier 2 review):* the words for a finding not yet
     /// decided are now the shortest, so F-007 is sent deferred without a triage, whose words are now the longest.
+    /// *Changed 2026-11-02 on purpose (002 T366; owner decision 198A):* a Defer's words now name Defer again and are no longer
+    /// the longest, so F-007 is sent accepted without a triage, whose words, "... press Accept again", now are.
     /// </summary>
     [Fact]
     public void ANoTriageLineIsWhollyVisibleAtThreeHundredPixelsInItsRow()
@@ -1492,7 +1553,7 @@ public sealed class ReviewPageTriageTests
             await ReviewPageSummaryAcceptanceTests.NarrowPane(driver);
             await driver.RouteAttention(Chat, SummarySample.Json());
             await driver.StartReview();
-            await driver.Push(Chat, 1, "finding", Finding("F-007", Disposition("deferred", string.Empty, null)));
+            await driver.Push(Chat, 1, "finding", Finding("F-007", Disposition("accepted", string.Empty, null)));
             await driver.EndSession(Chat);
             JsonElement placed = await driver.Read(ReadRow("F-007"));
             Assert.True(placed.GetProperty("inRow").GetBoolean(), "F-007's card is not in its grouped row.");
@@ -1500,7 +1561,7 @@ public sealed class ReviewPageTriageTests
 
             JsonElement measured = await driver.Read(ReadNoTriageWhole("F-007"));
             Assert.Equal(300, measured.GetProperty("width").GetInt32());
-            Assert.Equal(LabelsSample.NoTriageDeferred, measured.GetProperty("text").GetString());
+            Assert.Equal(LabelsSample.NoTriageAccepted, measured.GetProperty("text").GetString());
             Assert.True(measured.GetProperty("foldShut").GetBoolean(), "the finding's fold is open.");
             Assert.Empty(ReviewPageDriver.Strings(measured, "clipped"));
             Assert.True(measured.GetProperty("noHorizontalOverflow").GetBoolean(), measured.ToString());
@@ -1566,6 +1627,8 @@ public sealed class ReviewPageTriageTests
     /// not yet decided, F-002's Accept without a triage and F-003's Reject as `wrong`: their cards say they have none, to
     /// press Accept again, and nothing. After a reload the page shows chat-1, the newest review of the document, from its live
     /// snapshot: F-001's Defer and F-002's Reject without a triage, whose cards say to press Accept or Reject, and Reject again.
+    /// *Changed 2026-11-02 (002 T366; owner decision 198A):* F-001's Defer now says to press Defer again; the fact reads the
+    /// words from <see cref="LabelsSample"/>, and its code is as it was.
     /// </summary>
     [Fact]
     public void ANoTriageLineComesBackAfterAReloadAndAReviewSwitch()
@@ -1598,6 +1661,59 @@ public sealed class ReviewPageTriageTests
             await driver.Settle();
             Assert.Equal(LabelsSample.NoTriageDeferred, (await driver.Read(ReadNoTriage("F-001"))).GetProperty("text").GetString());
             Assert.Equal(LabelsSample.NoTriageRejected, (await driver.Read(ReadNoTriage("F-002"))).GetProperty("text").GetString());
+        });
+    }
+
+    /// <summary>
+    /// Owner decision 198A (002 T366; roadmap hole H-c-009): a card's note box shows the recorded note whenever the card is drawn,
+    /// so a press after a review switch or a reload posts the note recorded, not an empty box over it - the Defer's note, such as
+    /// 188A's date, survives the Defer's later Accept. The engineer chooses chat-2, whose live snapshot holds F-001 deferred with
+    /// a note and no triage, and F-002 not yet decided: F-001's box shows the Defer's note and F-002's is empty, and `new and real`
+    /// picked and Accept pressed on F-001 posts the note to chat-2. After a reload the page shows chat-1, the newest review of the
+    /// document, from its live snapshot, F-003 rejected with a note and no triage: its box shows the note, and the late triage
+    /// posts it.
+    /// </summary>
+    [Fact]
+    public void ANoteBoxShowsTheRecordedNoteAfterAReviewSwitchAndAReload()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            const string ChatRun = "20260923-101500-bracket-1";
+            const string Deferred = "FICT first shown at an earlier sitting";
+            string otherPath = "/sessions/" + OtherChat + "/findings/F-001/disposition";
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, ChatRun, ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver, Finding("F-009"));
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 200, Snapshot(
+                OtherRun,
+                false,
+                Finding("F-001", Disposition("deferred", Deferred, null)),
+                Finding("F-002")));
+            await driver.Route("POST", otherPath, 200, Finding("F-001", Disposition("accepted", Deferred, "new_and_real")));
+
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+            Assert.Equal(Deferred, await NoteBox(driver, "F-001"));
+            Assert.Equal(string.Empty, await NoteBox(driver, "F-002"));
+            await driver.ClearCalls();
+            await Press(driver, "F-001", "new_and_real");
+            await Decide(driver, "F-001", "accept");
+            JsonElement accepted = Assert.Single(await DispositionCalls(driver));
+            Assert.Equal(otherPath, accepted.GetProperty("path").GetString());
+            Assert.Equal("decision=accepted, note=" + Deferred + ", triage=new_and_real", Body(accepted));
+
+            driver.InitialRoutes.Add(("GET", "/sessions/" + Chat + "/snapshot", 200, Snapshot(
+                ChatRun,
+                false,
+                Finding("F-003", Disposition("rejected", "FICT not a clash", null)))));
+            await driver.Reload();
+            await driver.Settle();
+            Assert.Equal("FICT not a clash", await NoteBox(driver, "F-003"));
+            await driver.Route("POST", DispositionPath("F-003"), 200, Finding("F-003", Disposition("rejected", "FICT not a clash", "wrong")));
+            await driver.ClearCalls();
+            await Press(driver, "F-003", "wrong");
+            await Decide(driver, "F-003", "reject");
+            Assert.Equal("decision=rejected, note=FICT not a clash, triage=wrong", Body(Assert.Single(await DispositionCalls(driver))));
         });
     }
 
@@ -1812,6 +1928,14 @@ public sealed class ReviewPageTriageTests
         driver.Read(
             "document.querySelector('.card.finding[data-finding-id=\"" + findingId + "\"] input.note').value = "
             + JsonSerializer.Serialize(text) + "; return JSON.stringify({ok: true});");
+
+    /// <summary>What one card's note box holds, as the next press would post it (owner decision 198A).</summary>
+    private static async Task<string> NoteBox(ReviewPageDriver driver, string findingId) =>
+        (await driver.Read(
+            "var box = document.querySelector('.card.finding[data-finding-id=\"" + findingId + "\"] input.note');"
+            + "if (!box) { return JSON.stringify({ok: false, error: 'no note box on " + findingId + "'}); }"
+            + "return JSON.stringify({ok: true, note: box.value});"))
+        .GetProperty("note").GetString()!;
 
     private static string DispositionPath(string findingId) => "/sessions/" + Chat + "/findings/" + findingId + "/disposition";
 
