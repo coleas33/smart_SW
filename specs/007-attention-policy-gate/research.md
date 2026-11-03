@@ -1147,7 +1147,9 @@ it, but no page called it; the spec's Assumptions called a pane control a follow
 3. When: shown on a live review once a turn of it has ended - its stream's `turn.ended` or
    `session.ended`, which a waiting review's checks end with too, or a live snapshot not mid-turn;
    off while a turn runs, a review starts, a Send is on its way or a save is; absent on a
-   read-only restore.
+   read-only restore. *Changed 2026-11-03 (the Tier 2 review, below):* and gone once the backend
+   takes the review's minutes no more - another backend replaced the one that held it, or its turn
+   failed.
 4. The body: all six keys, a blank field as null, which keeps what is recorded; the number
    typed, as a number; and text that is not a number as typed, which the route refuses by name
    (`InvalidTiming`), so the page holds no rule about minutes. The fields are text boxes, so what
@@ -1161,7 +1163,8 @@ it, but no page called it; the spec's Assumptions called a pane control a follow
    would show supervision, verification and false alarms as 0 on every fresh review - their
    starting value, which the record cannot tell from a recorded 0 (the backlog's cycle 1 item) - as
    if the engineer had typed them. So the snapshot is unchanged, and a review switched to never
-   shows another review's figures.
+   shows another review's figures. *Changed 2026-11-03 (the Tier 2 review, below):* but for what
+   was typed on it and not saved, kept in page memory per review, as the questions' drafts are.
 7. The figures: in the fields, and where the route writes them, as `swreview timing` writes them -
    the run folder's `session.json`, and `report.md` and `attention.json` rendered again (186A);
    never in the Transcript or the page's other text, the findings document or a repository file.
@@ -1220,7 +1223,8 @@ against 81 / 10 / 0 at T091, before each recount.
 - A blank box keeps what is recorded, as the route and the console do: neither clears a figure.
 - After a backend restart, a review still on screen until it is shown again from its folder keeps
   its form, and Save is refused with `UnknownChat`'s sentence, which says to press Review; the seat
-  plan's step 4.1 sends the engineer to the console then.
+  plan's step 4.1 sends the engineer to the console then. *Resolved 2026-11-03 (the Tier 2 review,
+  below):* the form goes, as it does once the review's turn failed.
 - The route renders the run folder's `report.md` again, whose Timing section prints the six, as
   `swreview timing` does: the route is unchanged, so the figures are in the run folder's report as
   before, and nowhere new.
@@ -1242,3 +1246,53 @@ against 81 / 10 / 0 at T091, before each recount.
 - The link check over the cycle's 11 changed Markdown files: 137 relative links, anchors
   included, none broken. Every changed file LF in the index.
 - No SOLIDWORKS process, seat task, or paid or live test ran.
+- *Changed 2026-11-03:* that tree came before the Tier 2 review's fixes; their checks are in the
+  next paragraph, and the whole suites run on the final tree after them.
+
+**The Tier 2 review** (T091; 2026-11-03; decision 180A: one Opus review). No must-fix; five
+should-fix, each fixed test first, two things they left in
+[`docs/review-backlog.md`](../../docs/review-backlog.md), cycle 18's entry:
+
+1. After a restart, or a turn that failed, the form stayed, and every save was refused with a
+   sentence that sends the engineer to Review, a paid one with the send box ticked. Now the form
+   goes once the backend takes the review's minutes no more (`state.chatGone`): an `init` naming
+   another backend while a review not waiting for Send is on screen (one waiting is shown from its
+   folder, as before), an `error` on the review's stream, or a live snapshot's `failed`; it is
+   cleared for every review shown next. Default taken: the form goes, rather than every finished
+   review being shown read-only from its folder after a restart, which would change the rest of
+   the page (backlog). The seat plan's step 4.1 says the console records the minutes once the form
+   is gone.
+2. Five facts pin what no test held: a review waiting for Send shows the form on its checks'
+   `session.ended` alone and its save posts (M0-a's path); another active document hides it; it is
+   off while a review starts, a Send is on its way or a save is; and `turn.ended` alone shows it.
+3. Minutes typed and not saved are kept per review in page memory (`state.timingDrafts`), as the
+   questions' drafts are, and come back when their review is shown again, the automatic switch to
+   another document's review among the ways; a save recorded drops them, and a reload loses them,
+   as it does the drafts.
+4. `InvalidTiming`'s sentence is "Enter each as a number of minutes, 0 or more, then save again.",
+   the review's wording: the route refuses a negative figure with the same class, and "Enter the
+   minutes as numbers" was untrue of it. The seat plan explains it as a field holding no number, or
+   a number below 0.
+5. For a moment after a turn's `session.ended` the backend holds the chat `running` while it writes
+   the report, and answers a save `409 TurnRunning`. The page tries that save once more a second
+   later (`TIMING_RETRY`), the form off meanwhile, and a second refusal is the answer shown.
+   Default taken: one retry after one second. Decisions keep the race (backlog).
+
+Tests: ten new facts in `ReviewPageTimingTests.cs` and
+`test_review_words.py::test_a_refused_save_of_the_minutes_says_what_each_field_takes`; changed on
+purpose, each with a dated note, none loosened, `ARefusalSaysItsSentenceAndKeepsTheFigures` (its
+`TurnRunning` save read after the page's held timers run) and
+`test_the_minutes_are_typed_on_the_review_page_and_the_console_is_the_fallback` (step 4.1's two
+sentences). Red first: the five facts of items 1, 3 and 5 and the two Python cases, each for want
+of its change, while the class's 15 others and the two modules' 431 others passed. Item 2's five
+guards passed at once and were proved by six mutants, each file restored byte for byte, its
+sha256 checked: `app.css` without its `#timing` stale rule, the lock without `startPending`,
+without `sendPending` or without `timingPending`, and `endTurn` or `endSession` without its
+`turnEnded`, each failing its own fact. The pane fixtures' three generators moved the four that
+embed the labels by the one sentence, `review-send-failure-events.json`'s pin with them, and
+`LabelsSample.cs` mirrors it. Checks on this tree: every Review page class,
+`ErrorLabelsCoverTheHostTests` and `EngineeringContextPaneTests`, 497 passed, after the C# Release
+build with zero warnings; the 48 Python modules that read the words, the labels, the pane
+fixtures, the plan, the handover and the tracked files, the identifier scan among them, 3,399
+passed on Python 3.12.3 with the tokenizer required, and the two changed modules 433 on 3.11.16
+(`--isolated`); `ruff check src tests` clean. No task was added, so 007 stays 86 / 5 / 0.
