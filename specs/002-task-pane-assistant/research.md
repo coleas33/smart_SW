@@ -7758,7 +7758,9 @@ earlier review showed, so the date rested on recall.
     match holds each record for one read, about a millisecond. The add-in's session-head read has
     the same window: its `FileShare.Delete` lets `File.Replace` (`ReplaceFileW`), which its test
     uses, through, but not `os.replace`, as a probe on the development machine showed. The cure
-    for every reader is in `write_atomic`; for the owner.
+    for every reader is in `write_atomic`; for the owner. *Changed 2026-11-03 (cycle 25):* the
+    owner took that cure on 2026-11-03, from roadmap run 6's brief: `write_atomic` tries a
+    replace another handle refused again, for about 2 s (cycle 25, below).
 - **Tier 2 review** (T392; 2026-11-03): one must-fix and five should-fix, fixed test first where
   they lay in this cycle's change ([tasks.md](tasks.md), T392's sub-item), the rest in
   `docs/review-backlog.md`'s cycle 17 section:
@@ -8483,3 +8485,39 @@ both files are written, so a Retry that starts after `ended` cannot rotate the s
     at the close, `server.py` and the two test modules are git's three-way merge of both cycles,
     and the backlog's line references follow the stacked tree. T408's sub-item of the stacking in
     [tasks.md](tasks.md) names each meeting.
+
+### Cycle 25. A record is saved even while another reader holds it, on Windows (2026-11-03)
+
+The owner's pick on 2026-11-03 from roadmap run 6's brief
+([`docs/roadmap/README.md`](../../docs/roadmap/README.md#the-next-cycles-brief)): the cure cycle 17
+left for the owner (its *Left open*, the paragraph on `write_atomic`); Tier 2, no decision id.
+`write_atomic` replaces its target with `os.replace` (`MoveFileExW`), which Windows refuses while
+any other handle holds the target, whatever its share mode. A reader holds a record for about a
+millisecond - cycle 17's match reading earlier records, the add-in's session-head read, a console
+command - and a save in that instant failed.
+
+- **Settled**, the defaults taken inside the feature:
+  - **What is tried again.** A `PermissionError` whose `winerror` is 5, `ERROR_ACCESS_DENIED`,
+    which a reader of the target gives whatever its share mode, or 32, `ERROR_SHARING_VIOLATION`,
+    which a handle on the temporary gives unless it shares delete - a scanner's, say. A probe on
+    the development machine met 5 under Python's `open` and under every share mode `CreateFileW`
+    takes, from none to read, write and delete (the add-in's session-head read), and 32 with the
+    temporary held. Nothing else is tried again: any other error raises at once, as before, and
+    only Windows names a `winerror`, so nothing changes elsewhere.
+  - **How long.** Seven waits, 10, 20, 50, 100, 200, 500 and 1,000 ms (`REPLACE_WAITS_S`, 1.88 s
+    in all), each followed by a try: the first already outlasts a millisecond's read, and the
+    longer ones leave a slow reader room. Past the last, the last try's refusal raises as it is,
+    unwrapped, so each caller meets the error it met before, at most 1.88 s later.
+  - **The temporary** is written once and stays whole through every try; a failure removes it,
+    as before.
+  - **The callers**, each read: the session (`report/session.save_session`), the attention
+    record, the package merge (`ir/loader.py`), the engineering-context head and its history, the
+    engineering summary, the tokenizer's vocabulary, and the benchmark's records (its answer log,
+    pilot measurement, prompts record, provenance, run status, saved set, noise floor and packed
+    streams). None counts on a refusal coming at once: each passes it to its own caller as before.
+    The pane's backend writes off its event loop, its routes handing each write to a thread or a
+    chat's worker, so a wait holds no other request. Two hold something while they wait, and both
+    should still wait: the context store's `publish` keeps its publication lock, so a second
+    publisher meets `ContextStoreBusy` for up to 1.88 s more, as during any publish; and a backend
+    asked to stop finalizes its live reviews inside the add-in's 5 s grace
+    (`BackendProcess.StopGrace`), where a save still waiting at the kill is cut, as any save is.
