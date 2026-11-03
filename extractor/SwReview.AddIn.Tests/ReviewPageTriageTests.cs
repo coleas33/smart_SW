@@ -73,6 +73,8 @@ namespace SwReview.AddIn.Tests;
 /// with one picked, and its card says so in the backend's words; and a card's note box shows the recorded note when the card is
 /// drawn and after each reply, a refusal's too, so it never shows a note the backend did not keep and a later press posts the
 /// recorded note - after a reload or a review switch too - rather than an empty box over it.
+/// *Changed 2026-11-02 (002 T368; cycle 11's Tier 2 review):* not a refusal's: a refused press leaves the box as typed, since the
+/// backend never read its note, so the retry posts it.
 /// </summary>
 public sealed class ReviewPageTriageTests
 {
@@ -320,6 +322,11 @@ public sealed class ReviewPageTriageTests
     /// which the backend did not keep; the refused press posts what the box then holds, `FICT third
     /// note` typed over it, where it posted `FICT second note` still in the box; and after the
     /// refusal the box shows the recorded note again, as the row shows the recorded triage.
+    ///
+    /// *Changed 2026-11-02 on purpose (002 T368; cycle 11's Tier 2 review):* after the refusal the
+    /// box holds `FICT third note` as typed, where it showed the recorded note again: the backend
+    /// never read the refused press's note, so the box keeps it for the retry
+    /// (<see cref="ARefusedPressLeavesTheTypedNoteForTheRetry"/>).
     /// </summary>
     [Fact]
     public void ADecidedFindingWithoutATriageTakesOneWithTheSameDecision()
@@ -370,7 +377,7 @@ public sealed class ReviewPageTriageTests
             Assert.Equal(new[] { "already_known" }, Pressed(refused));
             Assert.Equal(Sentence("accepted", "already_known", "FICT first note"), refused.GetProperty("record").GetString());
             Assert.Equal(LabelsSample.TriageAlreadyRecorded, refused.GetProperty("refusal").GetString());
-            Assert.Equal("FICT first note", await NoteBox(driver, "F-001"));
+            Assert.Equal("FICT third note", await NoteBox(driver, "F-001"));
         });
     }
 
@@ -1714,6 +1721,38 @@ public sealed class ReviewPageTriageTests
             await Press(driver, "F-003", "wrong");
             await Decide(driver, "F-003", "reject");
             Assert.Equal("decision=rejected, note=FICT not a clash, triage=wrong", Body(Assert.Single(await DispositionCalls(driver))));
+        });
+    }
+
+    /// <summary>
+    /// Cycle 11's Tier 2 review (002 T368; owner decision 198A): a refused press leaves the note box as typed, since the backend
+    /// never read its note. F-001 is not yet decided; the engineer types the earlier sitting 188A asks for, picks `new and real`
+    /// and presses Accept while a turn still runs - the explanation pass, inside the turn's end - and the backend refuses it
+    /// (`409 TurnRunning`). The pick goes back to the record's, none, and the box keeps what was typed; once the turn is over,
+    /// the outcome picked again and Accept pressed again posts it.
+    /// </summary>
+    [Fact]
+    public void ARefusedPressLeavesTheTypedNoteForTheRetry()
+    {
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            const string Typed = "FICT first shown at an earlier sitting";
+            await Reviewed(driver, Finding("F-001"));
+            await driver.Route("POST", DispositionPath("F-001"), 409, TurnRunning);
+            await Note(driver, "F-001", Typed);
+            await Press(driver, "F-001", "new_and_real");
+            await Decide(driver, "F-001", "accept");
+
+            JsonElement refused = await driver.Read(ReadCard("F-001"));
+            Assert.Equal("TurnRunning", refused.GetProperty("refusalClass").GetString());
+            Assert.Empty(Pressed(refused));
+            Assert.Equal(Typed, await NoteBox(driver, "F-001"));
+
+            await driver.Route("POST", DispositionPath("F-001"), 200, Finding("F-001", Disposition("accepted", Typed, "new_and_real")));
+            await driver.ClearCalls();
+            await Press(driver, "F-001", "new_and_real");
+            await Decide(driver, "F-001", "accept");
+            Assert.Equal("decision=accepted, note=" + Typed + ", triage=new_and_real", Body(Assert.Single(await DispositionCalls(driver))));
         });
     }
 

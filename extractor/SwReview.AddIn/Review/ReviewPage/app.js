@@ -2695,13 +2695,12 @@
       }
     }).catch(function (error) {
       // Refused, so the record is as it was (roadmap hole H-g-012): the card shows it again - its
-      // triage pressed, or none, in place of the pick, its note in the box in place of what was
-      // typed (owner decision 198A), and its sentence above the refusal. Which press is refused is
-      // the backend's rule; the page compares nothing.
+      // triage pressed, or none, in place of the pick, and its sentence above the refusal. Which
+      // press is refused is the backend's rule; the page compares nothing. The note box keeps what
+      // was typed: the backend never read it, so the retry sends it (cycle 11's Tier 2 review).
       var entry = entryOf(card);
       var recorded = entry ? entry.body.disposition : null;
       render.pressTriage(card, recorded ? recorded.triage : null);
-      render.showNote(card, recorded);
       cardError(card, error, error.errorClass + ': ' + error.message);
       var text = render.dispositionText(recorded, state.labels);
       var status = card.querySelector('.card-status');
