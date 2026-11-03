@@ -1296,3 +1296,12 @@ build with zero warnings; the 48 Python modules that read the words, the labels,
 fixtures, the plan, the handover and the tracked files, the identifier scan among them, 3,399
 passed on Python 3.12.3 with the tokenizer required, and the two changed modules 433 on 3.11.16
 (`--isolated`); `ruff check src tests` clean. No task was added, so 007 stays 86 / 5 / 0.
+
+*Added 2026-11-03:* a read-only check of these fixes, no must-fix and five should-fix, all five
+taken, as T091's second dated sub-item records. Item 3's drafts: a recorded save's reply deleted
+whatever draft its review held when it landed, so minutes typed on the review, shown again before
+a slow reply, were lost unsaved; the reply now deletes only the draft its save posted. The second
+post that window allows, of the figures shown again, records them again and is left. Item 5's
+fact now reads the retry's second; the seat plan's step 4.5, item 4, names a failed review beside
+a restart, as step 4.1 does; and two test summaries and 009 `contracts/plain-words.md` section 1
+were put right.
