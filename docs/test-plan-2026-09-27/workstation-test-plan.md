@@ -2013,11 +2013,11 @@ Record: each pass or fail. Save no configuration change.
 4. **007 T060: record the timing of A's review**, with the six minutes you wrote in
    `notes\timing.txt` at step 4.1. You saved them on the Review page at step 4.1, so here you check
    what it wrote, in A's run folder only (`session.json`, then `report.md` and `attention.json`
-   rendered again). If you did not - the backend restarted before you saved them - you record them
-   here, at the console, the fallback: since item 2's restart the backend no longer holds A's
-   review, so nothing can save over what the command writes, in the same files. Make A active and
-   press its chip, press **Open run folder**, copy the address bar, and close that Explorer window.
-   Then paste the run folder in this line and run it:
+   rendered again). If you did not - the backend restarted, or the review failed, before you saved
+   them - you record them here, at the console, the fallback: since item 2's restart the backend no
+   longer holds A's review, so nothing can save over what the command writes, in the same files.
+   Make A active and press its chip, press **Open run folder**, copy the address bar, and close that
+   Explorer window. Then paste the run folder in this line and run it:
 
    ```powershell
    $run = '<paste the run folder of A, from step 4.1>'

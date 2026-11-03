@@ -2940,7 +2940,8 @@
    * recorded; a number goes as a number; other text goes as typed, for the route to refuse by name
    * (`InvalidTiming`): the page holds no rule about minutes. Nothing of the reply - the figures and the net - is
    * printed, and the boxes keep what was typed either way (decision 186A); once recorded, the review's draft goes
-   * (`keepTimingDraft`). A reply for a review the engineer has left since writes nothing.
+   * (`keepTimingDraft`) if it is the one posted, not one typed since on the review shown again (cycle 18's read-only
+   * check). A reply for a review the engineer has left since writes nothing.
    */
   function saveTiming() {
     var save = ui.timing.querySelector('[data-action="save-timing"]');
@@ -2955,12 +2956,15 @@
       body[boxes[index].getAttribute('data-input')] = !text ? null : (isFinite(number) ? number : text);
     }
     var chatId = state.chatId;
+    var draft = state.timingDrafts[chatId];
     var epoch = state.restoreEpoch;
     state.timingPending = true;
     timingLine(null);
     renderTiming();
     postTiming(sessionPath('/timing'), body, true).then(function () {
-      delete state.timingDrafts[chatId];
+      if (state.timingDrafts[chatId] === draft) {
+        delete state.timingDrafts[chatId];
+      }
       if (epoch === state.restoreEpoch) {
         timingLine('saved');
       }
