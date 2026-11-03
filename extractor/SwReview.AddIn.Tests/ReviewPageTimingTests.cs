@@ -27,6 +27,9 @@ namespace SwReview.AddIn.Tests;
 /// running a turn, as it does for a moment after the turn's end, is tried once more a second later; and facts of their own
 /// pin a review waiting for Send (M0-a's path), another document active, and the form off while a review starts, a Send is
 /// on its way or a save is.
+/// *Added 2026-11-03 (007 T091; a read-only check of those fixes):* a save recorded drops only the minutes it posted, so
+/// minutes typed on its review since - left and shown again before the reply - come back with it; and a refused save's retry
+/// is read to wait its second, the one timer the save sets.
 /// </summary>
 public sealed class ReviewPageTimingTests
 {
@@ -258,9 +261,10 @@ public sealed class ReviewPageTimingTests
     }
 
     /// <summary>
-    /// The form starts blank on every review it shows: switched to another live review of the same document, it shows
-    /// blank, with no line, and never another review's figures; Save then posts that review's own figures to its own
-    /// route; and back on the first review, the form is blank again.
+    /// The form starts blank on every review it shows - *since 2026-11-03* (007 T091; cycle 18's Tier 2 review), every one
+    /// that holds no minutes typed and not saved: switched to another live review of the same document, it shows blank, with
+    /// no line, and never another review's figures; Save then posts that review's own figures to its own route; and back on
+    /// the first review, whose minutes were recorded, the form is blank again.
     /// </summary>
     [Fact]
     public void AnotherReviewShowsTheFormBlank()
@@ -685,6 +689,10 @@ public sealed class ReviewPageTimingTests
     /// For a moment after a turn's end the backend still answers a save `409 TurnRunning`, while it writes the report: the
     /// page tries once more a second later, the form off meanwhile and no sentence said, and the second answer is the one
     /// shown - the line after a save, or, refused again, the class's sentence.
+    ///
+    /// *Changed 2026-11-03 (007 T091; a read-only check of those fixes):* the fact reads the second - the one timer the
+    /// refused save sets, of 1000 ms - and that each run of the held timers runs that one, where it ran whatever the page held
+    /// and read no delay, so a retry at once or a minute later, or a timer more, passed.
     /// </summary>
     [Fact]
     public void ASaveRefusedAsRunningIsTriedOnceMoreASecondLater()
@@ -704,7 +712,10 @@ public sealed class ReviewPageTimingTests
             Assert.True(waiting.GetProperty("saveDisabled").GetBoolean(), "Save is on while the save waits to be tried again.");
 
             await driver.Route("POST", TimingPath, 200, Recorded);
-            await driver.RunHeldTimers();
+            JsonElement held = await driver.Read(
+                "return JSON.stringify({ ok: true, delays: window.__heldTimers.map(function (t) { return t.delay; }) });");
+            Assert.Equal(new[] { 1000 }, held.GetProperty("delays").EnumerateArray().Select(delay => delay.GetInt32()).ToArray());
+            Assert.Equal(1, await driver.RunHeldTimers());
             JsonElement[] calls = await TimingCalls(driver);
             Assert.Equal(2, calls.Length);
             Assert.Equal(Posted, calls[1].GetProperty("body").GetString());
@@ -715,11 +726,52 @@ public sealed class ReviewPageTimingTests
             await driver.Route("POST", TimingPath, 409, TurnRunning);
             await driver.ClearCalls();
             await Save(driver);
-            await driver.RunHeldTimers();
+            Assert.Equal(1, await driver.RunHeldTimers());
             JsonElement busy = await driver.Read(ReadForm);
             Assert.Equal(2, (await TimingCalls(driver)).Length);
             Assert.Equal(LabelsSample.TurnRunning, busy.GetProperty("refusalText").GetString());
             Assert.Equal(Typed, Values(busy));
+        });
+    }
+
+    // ---- a read-only check of cycle 18's Tier 2 fixes (007 T091) --------------------------------
+
+    /// <summary>
+    /// A save recorded drops the minutes it posted and none typed since. Saved on a review whose reply is slow to come - as a
+    /// save refused as running a turn waits a second for its retry - the review is left and shown again, which brings back
+    /// the figures posted and turns the form on, and typed in again; the reply then leaves the later figures, which come back
+    /// the next time the review is shown, where they were lost, never saved.
+    /// </summary>
+    [Fact]
+    public void MinutesTypedSinceASaveWasPressedStayWhenItIsRecorded()
+    {
+        string[] later = { "420", "25", "330", "200", "55", "90" };
+        ReviewPageDriver.Run(Labelled, async driver =>
+        {
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(OtherChat, OtherRun, ReviewPageDriver.ReviewedPath, 8, 30));
+            driver.Sessions.Add(ReviewPageSessionsTests.Item(Chat, "20260923-101500-bracket-1", ReviewPageDriver.ReviewedPath, 10, 15));
+            await Reviewed(driver);
+            await driver.Route("GET", "/sessions/" + OtherChat + "/snapshot", 200, Snapshot(OtherRun, false));
+            await driver.Route("GET", "/sessions/" + Chat + "/snapshot", 200, Snapshot("20260923-101500-bracket-1", false));
+            await driver.HoldRoute("POST", TimingPath, 200, Recorded);
+            await Type(driver, Typed);
+            await Save(driver);
+
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+            await driver.Read(ReviewPageSessionsTests.Chip(Chat));
+            await driver.Settle();
+            Assert.Equal(Typed, Values(await driver.Read(ReadForm)));
+            await Type(driver, later);
+            await driver.ReleaseRoute("POST", TimingPath);
+
+            await driver.Read(ReviewPageSessionsTests.Chip(OtherChat));
+            await driver.Settle();
+            await driver.Read(ReviewPageSessionsTests.Chip(Chat));
+            await driver.Settle();
+            JsonElement back = await driver.Read(ReadForm);
+            Assert.True(back.GetProperty("shown").GetBoolean(), "the first review shows no form after the switch back.");
+            Assert.Equal(later, Values(back));
         });
     }
 

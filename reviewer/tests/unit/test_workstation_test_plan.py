@@ -2051,7 +2051,12 @@ def test_the_minutes_are_typed_on_the_review_page_and_the_console_is_the_fallbac
     `InvalidTiming`'s sentence means as the route refuses it - a field that holds no number, or a
     number below 0, where "something other than a number" was untrue of a negative figure - and
     sends the engineer to the console once the form is gone, as it goes when the backend
-    restarted or the review failed, where it said the form names the review no longer held."""
+    restarted or the review failed, where it said the form names the review no longer held.
+
+    *Changed 2026-11-03 on purpose (007 T091; a read-only check of the Tier 2 review's fixes):*
+    step 4.5's item 4 names the review that failed too, as step 4.1 does when it sends minutes
+    not saved there, where it named only a backend restarted before they were saved, so an
+    engineer whose review failed read its fallback as not theirs."""
     chips = step(plan, "4.5")
     restart = chips.index("The backend restarted, so this review is shown from its run folder.")
     review = re.sub(r"\s+", " ", step(plan, "4.1"))
@@ -2092,6 +2097,10 @@ def test_the_minutes_are_typed_on_the_review_page_and_the_console_is_the_fallbac
         "If the form is gone before you saved them - the backend restarted, or the review failed"
         " - step 4.5, item 4, records them at the console."
     ) in form
+    assert (
+        "If you did not - the backend restarted, or the review failed, before you saved them -"
+        " you record them here, at the console, the fallback"
+    ) in item_4
     assert "the form says the review is no longer held by the backend" not in form
     # Step 4.5: the check, and the command only as the fallback after the restart.
     assert "You saved them on the Review page at step 4.1, so here you check what it wrote" in (
