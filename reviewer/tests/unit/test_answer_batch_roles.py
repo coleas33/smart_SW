@@ -576,7 +576,9 @@ def context_with_findings(count: int) -> tuple[Any, Events]:
 
 def test_withdraw_findings_removes_them_in_session_order_and_announces_each() -> None:
     """*Changed 2026-11-03 on purpose (002 T382; cycle 16):* each body also names its finding's
-    display title, here the title "t" as written, since it is not the one `title_from` records."""
+    display title, here the title "t" as written, since it is not the one `title_from` records.
+    *Changed 2026-11-03 on purpose (002 T386; cycle 16's Tier 2 review):* "t" names none of the
+    finding's parts, so the name of its part, housing-1, follows it."""
     context, events = context_with_findings(3)
 
     gone = context.withdraw_findings(["F-003", "F-001"], "a reason")
@@ -584,8 +586,14 @@ def test_withdraw_findings_removes_them_in_session_order_and_announces_each() ->
     assert gone == ["F-001", "F-003"]
     assert [finding.id for finding in context.require_session().findings] == ["F-002"]
     assert events == [
-        ("finding.withdrawn", {"finding_id": "F-001", "title": "t", "reason": "a reason"}),
-        ("finding.withdrawn", {"finding_id": "F-003", "title": "t", "reason": "a reason"}),
+        (
+            "finding.withdrawn",
+            {"finding_id": "F-001", "title": "t; housing-1", "reason": "a reason"},
+        ),
+        (
+            "finding.withdrawn",
+            {"finding_id": "F-003", "title": "t; housing-1", "reason": "a reason"},
+        ),
     ]
 
 
@@ -613,7 +621,9 @@ def test_a_withdrawal_names_the_decision_and_triage_it_took() -> None:
     the reason - while an undecided finding's body is as before.
 
     *Changed 2026-11-03 on purpose (002 T382; cycle 16):* each body also names its finding's
-    display title, here the title "t" as written, decided or not."""
+    display title, here the title "t" as written, decided or not. *Changed 2026-11-03 on purpose
+    (002 T386; cycle 16's Tier 2 review):* "t" names none of the finding's parts, so the name of
+    its part, housing-1, follows it."""
     from swreview.report.dispositions import set_disposition
 
     context, events = context_with_findings(3)
@@ -633,7 +643,7 @@ def test_a_withdrawal_names_the_decision_and_triage_it_took() -> None:
             "finding.withdrawn",
             {
                 "finding_id": "F-001",
-                "title": "t",
+                "title": "t; housing-1",
                 "reason": "a reason",
                 "disposition": held["F-001"],
                 "taken": "your Reject (wrong) went with it",
@@ -643,13 +653,16 @@ def test_a_withdrawal_names_the_decision_and_triage_it_took() -> None:
             "finding.withdrawn",
             {
                 "finding_id": "F-002",
-                "title": "t",
+                "title": "t; housing-1",
                 "reason": "a reason",
                 "disposition": held["F-002"],
                 "taken": "your Accept went with it",
             },
         ),
-        ("finding.withdrawn", {"finding_id": "F-003", "title": "t", "reason": "a reason"}),
+        (
+            "finding.withdrawn",
+            {"finding_id": "F-003", "title": "t; housing-1", "reason": "a reason"},
+        ),
     ]
 
 
@@ -703,6 +716,33 @@ def test_a_withdrawal_names_its_findings_display_title() -> None:
     assert [(body["finding_id"], body.get("title"), "taken" in body) for _, body in events] == [
         ("F-001", whole, True),
         ("F-002", whole, False),
+    ]
+
+
+def test_a_withdrawal_names_its_findings_parts_where_its_title_names_none() -> None:
+    """002 T386 (cycle 16's Tier 2 review; FR-031): a check's title can name no part - "the
+    equation manager holds no equations" - so findings on two parts share it, and a withdrawal whose
+    title names none of its finding's parts names them after it: a line printed from the body alone
+    then says which part went, decided or not. A title that names its part, here by its document's
+    file name, is the display title alone."""
+    from swreview.report.dispositions import set_disposition
+
+    context, events = context_with_findings(3)
+    session = context.require_session()
+    shared = "the equation manager holds no equations"
+    session.findings[:] = [
+        session.findings[0].model_copy(update={"title": shared}),
+        session.findings[1].model_copy(update={"title": shared, "component_ids": ["cmp:0002"]}),
+        session.findings[2].model_copy(update={"title": "housing.SLDPRT has no part number"}),
+    ]
+    set_disposition(session, "F-002", "accepted", "FICT to fix", "FICT-ENG")
+
+    context.withdraw_findings(["F-001", "F-002", "F-003"], "a reason")
+
+    assert [(body["finding_id"], body.get("title"), "taken" in body) for _, body in events] == [
+        ("F-001", f"{shared}; housing-1", False),
+        ("F-002", f"{shared}; housing-2", True),
+        ("F-003", "housing.SLDPRT has no part number", False),
     ]
 
 

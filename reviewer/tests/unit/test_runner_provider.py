@@ -1829,7 +1829,9 @@ def test_a_restate_keeps_or_clears_a_decision_as_a_rerun_does(
     id, is withdrawn with `folded_into` right before F-001's `finding` event.
 
     *Changed 2026-11-03 on purpose (002 T382; cycle 16):* the withdrawal also names the title
-    F-001's `finding` event announces next, the restated finding's display title."""
+    F-001's `finding` event announces next, the restated finding's display title. *Changed
+    2026-11-03 on purpose (002 T386; cycle 16's Tier 2 review):* that title, "Holes on the pair",
+    names neither part of the pair, so their names follow it."""
     run = review([turn("nothing yet")])
     run.session.findings[:] = [
         judged("F-001", disposition=DECIDED),
@@ -1848,7 +1850,7 @@ def test_a_restate_keeps_or_clears_a_decision_as_a_rerun_does(
         "finding.withdrawn",
         {
             "finding_id": "F-002",
-            "title": after[1][1]["title"],
+            "title": f"{after[1][1]['title']}; housing-1 and housing-2",
             "reason": FOLDED_REASON.format(id="F-001"),
             "folded_into": "F-001",
         },
