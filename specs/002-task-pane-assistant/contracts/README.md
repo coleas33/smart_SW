@@ -13,6 +13,10 @@ Their ids are the earlier record's, so no reader drops a finding for them. And a
 writes each undecided earlier finding's last `disposition.cleared` again, onto the one finding with
 its subject key, before any decision it carries ([015 `recheck.md`](../../015-review-send-gate/contracts/recheck.md)
 section 4, step 8).
+*Amended 2026-11-02 (feature 015 cycle 12's Codex review, T123):* each `carried_withdrawals` item
+also names `session_id`, required: the session that withdrew it - the earlier record's for its own
+withdrawals, kept as it was for one that record carried itself - since finding ids restart in each
+session; `report.md` names it on the item's line.
 
 *Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in benchmark-run.md sections 6 to 8; the amendment text lands with the 014 task that changes the code:* `chat-events.schema.json` gains optional `served_model`, `stop_reason` and `retries` on the `usage` and `error` bodies.
 

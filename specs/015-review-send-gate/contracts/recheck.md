@@ -338,6 +338,12 @@ model's opening, and the id maps a page would need to re-key its own work are no
    itself) and `snapshot.withdrawn_lines` (its own), in that order, and `report.md` ends each of
    them with the words file's `withdrawn.earlier`, " (earlier check run)", since its id is the
    earlier record's and can name another finding of the re-run.
+   *Amended 2026-11-02 (cycle 12's Codex review, T123):* finding ids restart in each session, and a
+   chain of Check agains names several records' withdrawals, so each carried withdrawal names the
+   session that withdrew it, `session_id`: the earlier record's own are given that record's id
+   when first carried, and one it carried itself keeps the id it already has. `withdrawn.earlier`
+   is " (earlier check run, session {session_id})", the id in full as that record's `report.md`
+   heads itself.
 
 Nothing is carried by its number alone (FR-029). The carry ends with `_settle_waiting(applied)`,
 the step the waiting apply ends with too (owner decision 71A; `review-flow.md` section 4): the
@@ -406,6 +412,14 @@ re-run, the list begins with the items its own `coverage.recheck` row named, in 
 (`runner._not_carried_before`, which splits that row where they were joined, at each "; " outside
 parentheses): none of them reached that record, so none reaches this one, and a chain of Check
 agains keeps naming them. An item with the words of one before it is named once.
+
+*Amended 2026-11-02 (cycle 12's Codex review, T123):* those items name ids of the record before
+the earlier one, and ids restart in each session, so each that names an id - every item but the
+profile's - and no session yet is named in the session the earlier record was checked again from
+(its `rechecked_from`), whose id it is: `NOT_CARRIED_IN_SESSION`, " in session {session_id}"
+after the item (`words.md` section 4), the id in full as that session's `report.md` heads itself.
+An item already so named keeps its session; the profile's is named as it was, so a profile
+changed before each record is still named once; and the re-run's own items are as before.
 
 ## 6. Failure
 
