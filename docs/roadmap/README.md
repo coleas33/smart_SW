@@ -1,12 +1,11 @@
 # Roadmap
 
-How smart_SW becomes a tool working mechanical engineers choose for real SOLIDWORKS designs,
-because it finds real problems sooner and more cheaply than they would alone and they trust what
-it says. Benefit is measured, never asserted. The prompt that updates this page run after run is
-[`PROMPT.md`](PROMPT.md); the holes are in [`holes.md`](holes.md), the measures in
-[`metrics.md`](metrics.md), what is built and seen in [`capabilities.md`](capabilities.md).
-Nothing here is a task: proposed work says "proposed, not in any tasks.md" and reaches a
-`tasks.md` only after the owner's go.
+How smart_SW becomes a tool working mechanical engineers choose for real SOLIDWORKS designs, because it finds real
+problems sooner and more cheaply than they would alone and they trust what it says. Benefit is measured, never
+asserted. The prompt that updates this page run after run is [`PROMPT.md`](PROMPT.md); the holes are in
+[`holes.md`](holes.md), the measures in [`metrics.md`](metrics.md), what is built and seen in
+[`capabilities.md`](capabilities.md). Nothing here is a task: proposed work says "proposed, not in any tasks.md" and
+reaches a `tasks.md` only after the owner's go.
 
 ## Run record
 
@@ -18,19 +17,20 @@ Nothing here is a task: proposed work says "proposed, not in any tasks.md" and r
 | 4 (update) | 2026-11-02 | `0b9731b6` | 196A | 2026-10-13 (`docs/history/testing-feedback-2026-10-13.md`); S1 not yet held | `PROMPT.md`, version 1 | 3 of 8: Opus 3 (one hunter, one skeptic, the writer) |
 | 5 (update) | 2026-11-03 | `0ffb5c38` | 198A | 2026-10-13 (`docs/history/testing-feedback-2026-10-13.md`); S1 not yet held | `PROMPT.md`, version 1 | 3 of 8: Opus 3 (one hunter, one skeptic, the writer) |
 | 6 (update) | 2026-11-03 | `371404c3` | 198A | 2026-10-13 (`docs/history/testing-feedback-2026-10-13.md`); S1 not yet held | `PROMPT.md`, version 1 | 5 of 8: Opus 5 (one hunter, 3 skeptics, the writer) |
+| 7 (update) | 2026-11-03 | `7d1b6e6c` | 198A | 2026-10-13 (`docs/history/testing-feedback-2026-10-13.md`); S1 not yet held | `PROMPT.md`, version 1 | 4 of 8: Opus 4 (one hunter, 2 skeptics, the writer) |
 
 ## Change log
 
-### Run 6, 2026-11-03 (update run)
+### Run 7, 2026-11-03 (update run)
 
-Read `git log 85f17019..5d26bde7` (PRs #77 to #81), no register row past 198A, no sitting record; re-read lenses a, c,
-d and g. **Closed offline:** H-c-010 (PR #77). **Opened**, verified: H-a-015, a partial minutes save counts a blank
-box as 0 (13); H-d-009, a renumbering edit can misdate a finding (12); H-c-011, a finished review's controls stay on
-after a restart (11). **Re-scored:** H-g-010, F 2 to 1 (13), as PR #80 types the minutes on the page. **Restated:**
-H-a-009 (PR #79 built its feature), H-g-010 and nine more rows ([`holes.md`](holes.md)). **Run 5's next cycles:** four
-done (PRs #79, #80, #78, #77), the checkout one in the seat plan (PR #81); `Show-SetupTime` (needs a design) and the
-fixtures (the owner's to-do) slipped; M0's tables wait for M0-a's planning (197A). **Measured:** nothing at a seat.
-**Decided:** nothing new. Run 5's entry: [`archive/2026-11-03.md`](archive/2026-11-03.md#run-5-2026-11-03-update-run).
+Read `git log 5d26bde7..7d1b6e6c` (PRs #82 to #89), no register row past 198A, no sitting record; re-read lenses a, c,
+d, e and g. **Closed offline:** H-c-011 (PR #85), H-d-009 (PR #84); H-c-010's evidence corrected (PR #86). **Opened**,
+verified: H-d-010, findings on hole instances or cosmetic threads lose their first-shown date across dumps (14);
+H-c-012, a restored review takes no triage, a waiting one never naming the console (11). **Re-scored:** H-a-015, R 2
+to 1 (12): PR #83 makes a save type all six. **Restated:** seven rows, scores kept ([`holes.md`](holes.md)). **Run 6's
+next cycles:** seven done (PRs #83 to #89); `Show-SetupTime` (needs a design) and the fixtures (the owner's to-do)
+slipped; M0's tables wait for M0-a's planning (197A). **Measured:** nothing at a seat. **Decided:** nothing new. Run
+6's entry: [`archive/2026-11-03.md`](archive/2026-11-03.md#run-6-2026-11-03-update-run).
 
 ## Value model
 
@@ -46,36 +46,31 @@ what a miss costs are held privately by the owner, or "assumption, owner to conf
 | ECO/ECN | model and drawing | the change form: parts, drawings, interfaces | nowhere yet: change impact is deferred (001 `spec.md`); a re-review starts from scratch |
 | Shop or supplier RFI/NCR | the drawing | the NCR and the fix behind it | nowhere as output; as input, these are the escape-replay set |
 
-**Model versus drawing.** Both drawing switches ship off: `DrawingOpenScope.SeatValidated`
-(no closed drawing is opened; D14 at S1) and `DRAWING_BINDING_VALIDATED` (no callout binds to a
-hole; D4 to D8 at S4). A review reads only drawings already open, which crashed Review on
-2026-10-13 (ledger C1). So the tool serves the self-check and the design review, on the model
-only, and no engineer has yet used either at a seat. On the owner's answer about the released
-document (held privately) the drawing gap is a ranked hole (H-b-004).
+**Model versus drawing.** Both drawing switches ship off: `DrawingOpenScope.SeatValidated` (no closed drawing is
+opened; D14 at S1) and `DRAWING_BINDING_VALIDATED` (no callout binds to a hole; D4 to D8 at S4). A review reads only
+drawings already open, which crashed Review on 2026-10-13 (ledger C1). So the tool serves the self-check and the
+design review, on the model only, and no engineer has yet used either at a seat. On the owner's answer about the
+released document (held privately) the drawing gap is a ranked hole (H-b-004).
 
-**Instruments, and seat triage.** Dispositions (`accepted`, `rejected`, `deferred`, a note),
-carried off the seat by `swreview handoff`, were never pressed at a seat. Since PR #59 a flagged
-finding can hold one of four triage outcomes (185A): *new and real*, *real but already known*,
-*wrong*, *true but not worth flagging*; a pass only *wrong*, a miss (187A); `report.md` and, since
-PR #66, the pane count them. 007's `swreview timing` was never used; since PR #59 it counts setup
-and the review left by hand (183A, 184A; H-a-002). `swreview benchmark score` grades 014's
-fictional set; `swreview benchmark replay` prices recordings, not usefulness. Nothing records a
-review timed without the tool. The north star counts *new and real* findings and escape-replay
-hits; "accepted" alone is a guardrail.
+**Instruments, and seat triage.** Dispositions (`accepted`, `rejected`, `deferred`, a note), carried off the seat by
+`swreview handoff`, were never pressed at a seat. Since PR #59 a flagged finding can hold one of four triage outcomes
+(185A): *new and real*, *real but already known*, *wrong*, *true but not worth flagging*; a pass only *wrong*, a miss
+(187A); `report.md` and, since PR #66, the pane count them. 007's `swreview timing` was never used; since PR #59 it
+counts setup and the review left by hand (183A, 184A; H-a-002). `swreview benchmark score` grades 014's fictional set;
+`swreview benchmark replay` prices recordings, not usefulness. Nothing records a review timed without the tool. The
+north star counts *new and real* findings and escape-replay hits; "accepted" alone is a guardrail.
 
-**Escape replay and the defect census.** The owner names 10 to 20 defects caught late whose
-pre-fix revision exists; list, designs and scores stay in the private fork, and this repository
-records counts and categories only. Default taken, the owner may revise: a held-out evaluation
-set, split before the first replay into a half that may steer checks (tagged `tuned_on` once
-used, as `reviewer/src/swreview/benchmark/answer_key_model.py` allows) and a half only scored.
-Each pre-fix revision is reviewed read-only at the seat, code checks first, scored hit, partial
-or miss. Tallied by category, it is the **defect census** that ranks the checks. 014's recall
-stays a regression guardrail: fictional held-out items, tuned-on real anchors (15A, 014, 2026-09-29).
+**Escape replay and the defect census.** The owner names 10 to 20 defects caught late whose pre-fix revision exists;
+list, designs and scores stay in the private fork, and this repository records counts and categories only. Default
+taken, the owner may revise: a held-out evaluation set, split before the first replay into a half that may steer
+checks (tagged `tuned_on` once used, as `reviewer/src/swreview/benchmark/answer_key_model.py` allows) and a half only
+scored. Each pre-fix revision is reviewed read-only at the seat, code checks first, scored hit, partial or miss.
+Tallied by category, it is the **defect census** that ranks the checks. 014's recall stays a regression guardrail:
+fictional held-out items, tuned-on real anchors (15A, 014, 2026-09-29).
 
-**The denominator.** One engineer; three real assemblies ever reviewed at a seat (A, the small
-assembly, the only one on the checks-first build; B, the big assembly, once on 2026-09-20; one
-more on 2026-09-16), none with its drawings. Per-design medians and rates mean nothing at that
-number; per-review and process counts do.
+**The denominator.** One engineer; three real assemblies ever reviewed at a seat (A, the small assembly, the only one
+on the checks-first build; B, the big assembly, once on 2026-09-20; one more on 2026-09-16), none with its drawings.
+Per-design medians and rates mean nothing at that number; per-review and process counts do.
 
 **Assumptions.** The plan rests most on two: **A1**, most of the owner's late defects are visible
 in what the tool reads at the pre-fix revision (if most are drawing-only, the replay measures the
@@ -124,8 +119,8 @@ new check enters without a real instance and the owner's estimate of its frequen
      or not, and the engineer judges each (H-g-002); on B, only these (190A).
   5. One report, carried off the seat by `swreview handoff`, read by the second reader, who gives
      each finding the four outcomes.
-- **Holes it closes:** H-a-001 to H-a-004, H-a-009, H-a-010, H-a-013 to H-a-015, H-c-006, H-c-011,
-  H-d-009, H-e-003, H-g-002, H-g-003, H-g-010, H-g-011, H-g-013.
+- **Holes it closes:** H-a-001 to H-a-004, H-a-009, H-a-010, H-a-013 to H-a-015, H-c-006, H-c-012,
+  H-d-010, H-e-003, H-g-002, H-g-003, H-g-010, H-g-011, H-g-013.
 - **Seat time:** two sittings after S1: M0-a, no key (step 1, the triaged review, the replay's
   extractions, step 6); M0-b, S3's first sitting (steps 2.5, 4.1, 4.2, 4.5 and 4.11).
 - **Owner decisions:** taken, the sitting order (181A), the freeze (179A), the timing kept private
@@ -206,14 +201,13 @@ new check enters without a real instance and the owner's estimate of its frequen
 
 ## The next cycles' brief
 
-**Cycles 1 to 19: done** (PRs #59, #61 to #66, #68 to #70, #72 to #75, #77 to #81). **Proposed, not in any tasks.md**, best first, each at its 180A tier:
-- **Save minutes stays off while any minutes box is blank**, so each save records all six, as the plan's console line does (H-a-015, 13; Tier 2).
-- **A first-shown date only for the same instance or entity**, so an edit that renumbers ids no longer dates a new problem as old (H-d-009, 12; needs a design, since none of the backlog's three matches closes the bolt case; Tier 2).
-- **After a backend restart, a finished live review is redrawn read-only at once**, not left with controls that each meet `UnknownChat` (H-c-011, 11; backlog, cycle 18; Tier 2).
-- **Every other refusal stops telling the engineer to reload**, a reload that loses the typed note (002 research, H-c-010's *Left open*; Tier 2).
-- **A decision pressed right after a review ends no longer meets `TurnRunning`** while the report is written (backlog, cycle 18; Tier 2).
-- **The record writer's atomic replace survives another reader's open handle on Windows** (002 research, cycle 17; Tier 2).
-- **The update and registration scripts and the runbook read the checkout literally** (backlog, cycle 19; Tier 3).
+**Cycles 1 to 26: done** (PRs #59, #61 to #66, #68 to #70, #72 to #75, #77 to #81, #83 to #89). **Proposed, not in any tasks.md**, best first, each at its 180A tier:
+- **An unchanged design keeps every first-shown date across dumps**, joint, tool-access and cosmetic-thread findings included: an earlier record whose folder's package equals this review's, but for its id and clocks, keeps its ids as they are; then a hole instance is named by its hole and place, a cosmetic thread by its feature's name kept in the dump (H-d-010, 14; Tier 2).
+- **A restored review takes the rest of its triage**: an outcome and a decision on each card still lacking one, written to its run folder as `swreview disposition` writes it; till then a waiting review's line names the console too (H-c-012, 11; an owner decision amending 009 FR-021 first; Tier 2).
+- **A Check again that makes the restart sends its re-run**, instead of reading its snapshot with the old token, refused `401` (backlog, cycle 22; feature 015's; Tier 2).
+- **The refusals that still say to reload say what the engineer can do**: `UnknownFinding`, `AlreadyAnswered`, `UnknownEvidenceRequest` and `NotWaiting` (002 research, cycle 23's *Left open*; Tier 2).
+- **A Stop pressed as a review ends no longer stops the next turn at its first tool call** (backlog, cycle 24; Tier 2).
+- **A Retry that meets another reader's handle on Windows waits it out**, as a save now does (backlog, cycle 25; Tier 2).
 - **`Show-SetupTime` takes the timed review's own `POST /sessions` answer** (backlog, cycle 14; needs a design; Tier 3).
 - **The replay fixtures regenerated once with the null tally key**, from the owner's recordings: the owner's to-do (backlog, cycle 13).
 - **Then M0's tables** (H-a-003, H-a-004, H-a-009, H-a-010 with 190A, H-a-013 to H-a-015, H-g-010, H-g-011, H-g-013; 197A), when M0-a is planned; then H-g-003's escape keys, by hand till then.
@@ -222,8 +216,9 @@ new check enters without a real instance and the owner's estimate of its frequen
 
 **Answered:** round 2 (2026-10-31), 179A to 182A; after cycle 1's review (2026-11-01), the order of work, with 183A
 kept, not numbered; in run 2, 186A to 190A; since, 191A to 194A and cycle 7's pick (185A's row); in run 3, 195A; in
-cycle 8, 196A; in run 4, 197A and 198A; on 2026-11-03, PRs #72 to #76 merged in order, cycles 15 to 19 kept, this run
-next; the merges and the other next picks not numbered. All in [`docs/decisions.md`](../decisions.md).
+cycle 8, 196A; in run 4, 197A and 198A; on 2026-11-03, PRs #72 to #76 merged in order, cycles 15 to 19 kept and run 6
+next, then all seven of run 6's proposals built as drafts and merged in order (PRs #83 to #89), and this run merged
+once green; the merges and the picks not numbered. All in [`docs/decisions.md`](../decisions.md).
 
 **Defaults taken, the owner may revise:** the escape set is a held-out evaluation set, split before the first replay;
 the precision floor's threshold ([`metrics.md`](metrics.md#the-precision-floor)); the north-star question waits for
@@ -236,12 +231,17 @@ withdrawn part placed right after the Summary; from cycles 11 to 14: 198A's firs
 the card says; a refused press leaves the note box as typed; a cleared line is carried only at its own verdict, and no
 decision is restored to a finding back at the decided one (194A); carried withdrawals name the full session id;
 mid-turn the tally counts one too many per re-run; `Save-TimingNote` times from the run folder's stamp to its
-`ended_at`; and, from cycles 15 to 18: `OutcomeNeeded` for a flagged finding alone, a pass and a Defer holding an
-outcome keeping `IllegalTransition`; `--note` left out keeping the recorded note; a withdrawal naming its finding's
-parts when the title names none, uncapped; the first-shown date from each record's own clock, check-tab runs uncounted
-(the owner may count them), with a 2 s budget and a part guard; and the minutes form's text boxes, a blank one keeping
-the recorded figure, the form gone after a restart or a failure, one retry of a refused save after 1 s, and the run
-folder's `report.md` printing the minutes as `swreview timing` does.
+`ended_at`; from cycles 15 to 18: `OutcomeNeeded` for a flagged finding alone; `--note` left out keeping the recorded
+note; a withdrawal naming its finding's parts when the title names none, uncapped; the first-shown date from each
+record's own clock, check-tab runs uncounted (the owner may count them), with a 2 s budget and a part guard; and the
+minutes form's text boxes, the form gone after a restart or a failure, one retry of a refused save after 1 s, and the
+run folder's `report.md` printing the minutes as `swreview timing` does; and, from cycles 20 to 25:
+- Save minutes needs all six boxes filled, whatever the text, its line writing "zero" as a word, since no word of the form holds a digit (186A); a correction on the page retypes all six, and the console still corrects one figure.
+- The first-shown date matches an instance by its full path and an entity by its stable name; a shared or empty name counts as none, and a subject with none, a hole instance or a cosmetic thread among them, gets no date (H-d-010).
+- After a restart the review on screen, mid-turn or not, comes back read-only from its folder, a failed one keeping Retry; decisions on a restored review stay off (009 FR-021; H-c-012); one whose run root moved is left live, since a restore would read outside the run root (154A).
+- A different decision on an accepted or rejected finding keeps `IllegalTransition`; one `DecisionAlreadyRecorded` sentence serves every decision, and Defer again on a Defer holding an outcome is `AlreadyDeferred`.
+- A write sent as a review ends waits up to 5 s for the report, the writes that waited going on in the order they came.
+- A replace another reader refused is tried again for at most 1.88 s; a folder at the target's name or a read-only file fails at once.
 
 **Owner questions the holes route to a decision, each asked with its milestone:** one model for the seat, the pane
 default and the study (H-e-003, M0); a lighter seat update (H-c-003), a growth budget (H-f-005), an ask register
