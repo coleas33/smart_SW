@@ -76,15 +76,16 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
            "Open an x64 'Windows PowerShell (Admin)' prompt and run it again.")
 }
 
+# The build is read literally: a [ or ] in the checkout's path is no wildcard.
 $addInDirectory = Join-Path $PSScriptRoot "..\SwReview.AddIn\bin\x64\$Configuration\net48"
-if (-not (Test-Path $addInDirectory)) {
+if (-not (Test-Path -LiteralPath $addInDirectory)) {
     throw ("No $Configuration build output at $addInDirectory. " +
            "Run: dotnet build extractor\SwReview.sln -c $Configuration")
 }
-$addInDirectory = (Resolve-Path $addInDirectory).Path
+$addInDirectory = Convert-Path -LiteralPath $addInDirectory
 
 $addIn = Join-Path $addInDirectory "SwReview.AddIn.dll"
-if (-not (Test-Path $addIn)) {
+if (-not (Test-Path -LiteralPath $addIn)) {
     throw "SwReview.AddIn.dll is not in $addInDirectory; build the solution first."
 }
 
@@ -108,7 +109,7 @@ foreach ($interop in $interops) {
         throw "$source is missing; this seat's api\redist does not carry the add-in's interops."
     }
 
-    Copy-Item -Path $source -Destination $addInDirectory -Force
+    Copy-Item -LiteralPath $source -Destination $addInDirectory -Force
     Write-Host "staged  $interop -> $addInDirectory"
 }
 

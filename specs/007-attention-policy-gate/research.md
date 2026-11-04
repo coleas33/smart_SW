@@ -1587,3 +1587,132 @@ T099's second dated sub-item records. *Left open* credited the line with what on
 that a correction retypes all six from the note, and that 0 is never typed for a figure not known
 yet. It now credits step 4.1, the line saying each figure replaces what is recorded. Words in this
 record only: no code, test or words file changed.
+
+## R15. The update and registration scripts and the runbook read the checkout literally (cycle 26, 2026-11-03)
+
+**Settled** (T100, 2026-11-03): every read of the checkout in
+`extractor/tools/update-workstation.ps1`, `extractor/tools/register-addin.ps1` and the PowerShell
+of [`docs/workstation-runbook.md`](../../docs/workstation-runbook.md) names it literally. Cycle 19's
+own finding in [`docs/review-backlog.md`](../../docs/review-backlog.md) (R13, *Left open*),
+proposed in roadmap run 6's brief and picked by the owner on 2026-11-03, at review Tier 3 (the
+gates and CI, no review). It carries no decision of its own.
+
+Why: Windows PowerShell reads a path given by `-Path`, or by position, as a wildcard, and so do
+the call operator and `Set-Alias`. Tried in Windows PowerShell 5.1 on fictional checkouts:
+`Resolve-Path` of a path whose brackets match nothing answers nothing, with no error, so in a
+checkout under `chk [1]` alone the update script stops at its next line,
+`Join-Path : Cannot bind argument to parameter 'Path' because it is null`. Beside `chk 1`, a
+checkout of its own, `Resolve-Path` answers that folder, and so do `Push-Location`, the
+registration script's `Test-Path` and `Resolve-Path`, the call operator by which `-Register` runs
+the registration script, and the runbook's `cd '<repo>'` and alias: the update script would
+build, gate and register the other checkout. A script run by its relative path from the
+checkout, as the runbook runs both, is the checkout's own, and its `$PSScriptRoot` names its
+folder literally.
+
+Defaults taken:
+
+1. Every cmdlet that reads the checkout, or a path in it, takes it by `-LiteralPath`: the update
+   script's two `Push-Location`s, into the checkout and its `reviewer` folder, and its `Test-Path`
+   of the built console; the registration script's `Test-Path` of the build folder and of the
+   add-in in it; and the runbook's three `cd '<repo>'` (sections 3, 4 and 9), `cd` being
+   `Set-Location`'s alias. The runbook's `cd` is named in no brief, but it reads the checkout as
+   the alias does, and every command after it runs in the folder it went into.
+2. `Convert-Path -LiteralPath` in place of `(Resolve-Path ...).Path`, in both scripts: it answers
+   the same string for an ordinary path, `..` resolved, and stops with `Cannot find path` where a
+   wildcard's `Resolve-Path` answered nothing.
+3. The call operator and `Set-Alias` take no `-LiteralPath`, so their path is escaped by
+   `[Management.Automation.WildcardPattern]::Escape`, as the seat plan's alias is since cycle 19:
+   the update script's run of the registration script, the alias line it prints for the engineer
+   to paste, and the runbook's two alias lines, in its table of where things are and in its quick
+   reference. A path with no bracket is unchanged.
+4. The registration script's `Copy-Item` of the seat's interops reads its `-Destination`, the
+   build folder, literally already (tried in Windows PowerShell 5.1); its source, an interop
+   under `-SolidWorksRoot`, is taken by `-LiteralPath` too, so the one call that names the
+   checkout reads every path it names literally.
+5. A read that is not of the checkout stays as it was, each name it gives listed in the static
+   pin with what it is: the seat's interops under `-SolidWorksRoot`, the 64-bit regasm under
+   `%WINDIR%`, the standards profile and the logs in the account's local application data, the
+   runbook's registry keys, and the script block `Invoke-Step` runs. A path relative to the
+   checkout - the runbook's `cd reviewer` and `cd ..`, and the scripts run as
+   `.\extractor\tools\...` - stays by `-Path`, which Windows PowerShell 5.1 reads rightly there
+   (R13, default 3).
+6. The run-time pin runs only the lines that find the checkout, as they stand in the scripts:
+   the update script's first lines and its health step's console lines, and the registration
+   script's lines that find its build, each in a file of its own in the fictional checkout's
+   `extractor\tools`, so its `$PSScriptRoot` is the script's own. The lines run alone as they
+   are, so no function was needed; nothing builds, registers or touches the registry.
+
+**Built** (T102, 2026-11-03), as *Settled* says. In the update script,
+`$repo = Convert-Path -LiteralPath (Join-Path $PSScriptRoot "..\..")`, `Push-Location -LiteralPath`
+into the checkout and its `reviewer` folder, `Test-Path -LiteralPath $extract`, the registration
+script run as `& ([Management.Automation.WildcardPattern]::Escape($registration))`, and the
+alias line it prints,
+`Set-Alias swreview-extract ([Management.Automation.WildcardPattern]::Escape("<path>"))`. In the
+registration script, the build folder's and the add-in's `Test-Path -LiteralPath`,
+`Convert-Path -LiteralPath` in place of `Resolve-Path`, and the interops'
+`Copy-Item -LiteralPath`. In the runbook, `cd -LiteralPath '<repo>'` in sections 3, 4 and 9, and
+the alias escaped in section 1's table and section 9's quick reference. An ordinary path gives
+the same strings as before.
+
+- Tests, new, in `reviewer/tests/unit/test_workstation_test_plan.py`:
+  `test_every_read_of_the_checkout_in_the_scripts_and_the_runbook_is_literal`, read on every
+  platform and deny by default, over the two scripts and the runbook's PowerShell, its blocks and
+  the commands in its text, with `NOT_THE_CHECKOUT` naming the eight names a read may still give
+  by `-Path` and what each is; and `test_the_scripts_find_a_checkout_whose_path_holds_brackets`
+  and `test_the_runbook_finds_a_checkout_whose_path_holds_brackets`, in Windows PowerShell, on a
+  fictional checkout - plain, in `repos [1]` alone, and there beside `repos 1`, a checkout of its
+  own - whose console and add-in are empty files, so nothing runs.
+- Changed on purpose, each with a dated note, none loosened: `PATH_CMDLET`, with `Convert-Path`
+  and `Resolve-Path`, neither of which the plan uses; and 007's row in
+  `test_the_specs_readme_counts_a_task_173a_closed_as_done`.
+- Tests first: five cases failed before T102, each for want of the literal reads. The static pin
+  listed 12 calls: the update script's `Resolve-Path`, its two `Push-Location`s, the console's
+  `Test-Path` and the call operator's `(Join-Path $PSScriptRoot "register-addin.ps1")`; the
+  registration script's two `Test-Path`s, its `Resolve-Path` and its `Copy-Item -Path`; and the
+  runbook's three `cd '<repo>'`. The scripts' pin failed in `repos [1]` alone on both scripts
+  stopping at once - `Cannot bind argument to parameter 'Path' because it is null`, then
+  `No Release build output at` - and beside `repos 1` on every line naming `repos 1`; the runbook's
+  pin alone on `cd`'s red `Cannot find path`, and beside `repos 1` on the window and the alias in
+  `repos 1`. The two plain cases passed before and after. All passed after T102 with no other
+  test changed. Four mutants, each file restored byte for byte, its sha256 checked: the runbook
+  table's alias unescaped, and the registration script run by its path unescaped, each turned the
+  static pin red alone, as no run-time pin reads either; the alias line the update script prints
+  unescaped turned the static pin red and the scripts' case beside `repos 1` on the pasted alias
+  alone; and `Get-Item -LiteralPath`, without `.FullName`, in place of
+  `Convert-Path -LiteralPath`, turned all three of the scripts' cases red, the plain one among
+  them. The README pin was red against 94 / 5 / 0 at T100 and against 95 / 8 / 0 at T103 before
+  each recount.
+
+**Left open**, none of it in the backlog. A script run by its full path - `powershell -File`, or
+the call operator given the path - beside a folder its brackets match is that folder's script,
+and the checkout it finds is that folder's, which nothing in the script can tell (tried in
+Windows PowerShell 5.1); the runbook and the seat plan run both scripts by their path from the
+checkout, which is the checkout's own. The reads that are not of the checkout stay by `-Path`
+(default 5): a SOLIDWORKS root whose path holds brackets was not tried. The registration script
+has no parse pin of its own, as before; it was parsed by hand at T102.
+
+**Gates** (T103; 2026-11-03), on the final tree:
+
+- Python 3.12.3, the tokenizer required: the whole non-live suite, 19,003 passed and 5 skipped.
+- Python 3.11.16 (`uv run --python 3.11 --isolated --all-extras`), the tokenizer required, over
+  the eight modules that the change touches or that read the changed files - the seven seat
+  modules (`test_workstation_test_plan.py`, `test_workstation_handover.py`,
+  `test_update_workstation_script.py`, `test_seat_assumptions.py`, `test_seat_switch_evidence.py`,
+  `test_remodel_ledger.py` and the identifier scan, `test_tracked_files_carry_no_recorded_number.py`)
+  and `test_standards_no_company_values.py`, which scans every tracked script and Markdown file:
+  527 passed, none skipped, as on 3.12.
+- `ruff check src tests` clean; the identifier scan, 58 passed.
+- The link check over the cycle's six changed Markdown files: 153 relative links, anchors
+  included, none broken. Every changed file LF in the index.
+- No C# or page file changed, so no C# gate, and no words changed. No SOLIDWORKS process, seat
+  task, or paid or live test ran.
+- The whole suites on the final tree (`1dbc6016`, 2026-11-03): 19,088 passed and 5 skipped on Python
+  3.12.3 and the same on 3.11; ruff clean; the identifier scan, 58 passed; C# with zero warnings,
+  then 10,274 extractor and 4,411 add-in tests passed (T103's line).
+- *Done 2026-11-03, cycle 26 stacked on cycle 25:* the gates above ran on cycle 26 before it was
+  stacked on cycle 25 (002 Phase 40, T409 to T412, itself stacked on cycles 24 to 21 and on this
+  feature's cycle 20, R14). The two met in five files, records and the plan's pins, none of them a
+  script, words, C#, page or fixture file, and each kept both cycles' text, the lower cycle's first:
+  007's row is 95 / 8 / 0 at T100 and 98 / 5 / 0 at T103, R14 comes before this section and Phase 16
+  before Phase 17, and the backlog keeps cycle 19's item, resolved, before cycles 21 to 25's
+  sections. T103's sub-item of the stacking in [tasks.md](tasks.md) names each meeting.
