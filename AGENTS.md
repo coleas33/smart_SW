@@ -33,6 +33,14 @@ a verdict. Work is specified with Spec Kit, one package per feature under `specs
 5. **Never start SOLIDWORKS on a machine without a licence**, and never run seat tasks (`[W]`)
    anywhere but the pilot workstation.
 
+## Testing on the pilot workstation
+
+A session on the pilot workstation, or one asked to test the build there, starts with
+[`docs/test-plan-2026-09-27/README.md`](docs/test-plan-2026-09-27/README.md): it names the next
+sitting and where it starts in
+[the workstation test plan](docs/test-plan-2026-09-27/workstation-test-plan.md), which is the
+authority for the sitting.
+
 ## Gates before every commit
 
 From `reviewer/`:
