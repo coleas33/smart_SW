@@ -21,28 +21,18 @@ do not follow them.
 
 ## Where this sitting starts
 
-- *Since 2026-10-31* **the next sitting is S1** (decision 167A): about three hours, with no key and
-  no paid call, for Remodel Start's evidence. The plan's sections "Sittings" and "S1: Start
-  readiness" give its steps, in order; the bullets below describe the two-day sitting S1 replaces.
-- The 2026-09-26 sitting reached steps 1.3, 1.6, 1.7, 2.2 and 2.3 on an older build.
-- **This sitting still runs step 1 first**, so the update brings the new build and the gates run. It
-  then **continues from step 2.4**. The handover's section "Where the 2026-09-26 sitting stopped"
-  says which earlier results carry over.
-- *Added 2026-09-28:* **after step 1 and before step 2.4, the retest of the 2026-09-28 sitting's
-  findings U25 to U27 comes first**: the plan's step 4.9 (a drawing active) and step 5.3 (crash
-  capture, Remodel a copy on a throwaway box, then part J checked in). The plan's section "First:
-  the retest" gives the order and what to keep if SOLIDWORKS closes;
-  [`../history/testing-feedback-2026-09-28.md`](../history/testing-feedback-2026-09-28.md) says what changed.
-- New in this build:
-  - bought (COTS) parts are told apart from custom parts;
-  - findings are grouped by type;
-  - labels say "Checked by code" or "AI guidance";
-  - the review no longer asks about vault versions;
-  - there is an honest drawing offer;
-  - the re-modeler has a SOLIDWORKS seat. Plan runs on a copy, and Start stays switched off until
-    the blocking probes pass.
-- The plan's steps for these are marked with their task ids (013 T141 to T144, T153, 004 T033 to
-  T039).
+The next sitting is **S1, Start readiness** (decision 167A, since 2026-10-31): about three hours,
+with no key and no paid call, for Remodel Start's evidence.
+
+1. Open the plan's section [S1: Start readiness](workstation-test-plan.md#s1-start-readiness) and
+   check its **Before the sitting** list first. Stop and tell the engineer if anything on it is
+   missing.
+2. Run S1's table in order, each step as the step itself says.
+3. Fill the results sheet as each step ends (step 1.4 copies it into the handover folder).
+
+The plan's sections "The next sitting: where 2026-09-26 stopped" and "First: the retest of
+2026-09-28's findings" describe the two-day sitting S1 replaced. Do not start from them; S1's table
+names the steps it takes from them.
 
 ## Rules for the whole sitting
 
